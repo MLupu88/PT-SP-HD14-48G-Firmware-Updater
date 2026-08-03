@@ -4,10 +4,12 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Vite inlines VITE_* variables at build time, so the safety flag must be
-# supplied here (and defaults to disabled, matching the repo default).
+# Vite inlines VITE_* variables at build time, so the safety flags must be
+# supplied here (and default to disabled, matching the repo default).
 ARG VITE_ENABLE_REAL_FLASHING=false
 ENV VITE_ENABLE_REAL_FLASHING=${VITE_ENABLE_REAL_FLASHING}
+ARG VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION=false
+ENV VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION=${VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION}
 
 COPY package.json package-lock.json* ./
 RUN npm install

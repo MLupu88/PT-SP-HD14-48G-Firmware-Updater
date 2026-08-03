@@ -1,4 +1,5 @@
 import type { UpdateState } from "../lib/update-engine";
+import type { RealConnectionPhase } from "./hooks/useFirmwareUpdater";
 
 /**
  * All customer-facing copy for the guided update flow lives here, kept
@@ -34,6 +35,16 @@ export const STATE_STATUS_TEXT: Partial<Record<UpdateState, string>> = {
   finalizing: "Finishing installation",
   verifying: "Checking the new version",
 };
+
+/** Calm labels for the Phase 2A real-device connection phases (see RealConnectionPhase). */
+export const REAL_CONNECTION_PHASE_TEXT: Partial<Record<RealConnectionPhase, string>> = {
+  selecting: "Choose your device",
+  connecting: "Connecting",
+  checking: "Checking the device",
+};
+
+export const DEVICE_IDENTIFIED_HEADING = "Device connected";
+export const DEVICE_UNIDENTIFIED_HEADING = "We could not identify this device";
 
 export const COMPATIBLE_BROWSER_MESSAGE =
   "This updater works in Google Chrome or Microsoft Edge on a Windows, Mac, or Linux computer.";
@@ -82,6 +93,54 @@ const ERROR_PRESENTATIONS: Record<string, Omit<ErrorPresentation, "technicalCode
     message: "Connecting a real device isn't available in this version.",
     deviceSafe: true,
     nextAction: "Try the demo instead.",
+  },
+  READ_ONLY_DISABLED: {
+    title: "Not available yet",
+    message: "Connecting a real device isn't available in this version.",
+    deviceSafe: true,
+    nextAction: "Try the demo instead.",
+  },
+  WEB_SERIAL_UNSUPPORTED: {
+    title: "Not supported",
+    message: "This browser can't connect to a real device.",
+    deviceSafe: true,
+    nextAction: "Try the demo instead, or use Chrome or Edge on a computer.",
+  },
+  PORT_SELECTION_CANCELLED: {
+    title: "No device selected",
+    message: "You did not select a device. Nothing was changed.",
+    deviceSafe: true,
+    nextAction: "Choose Connect device to try again.",
+  },
+  CONNECTION_IN_PROGRESS: {
+    title: "Already connecting",
+    message: "A connection attempt is already in progress. Nothing was changed.",
+    deviceSafe: true,
+    nextAction: "Wait for it to finish, or refresh the page.",
+  },
+  READ_TIMEOUT: {
+    title: "No response",
+    message: "The device did not respond. Nothing was changed.",
+    deviceSafe: true,
+    nextAction: "Check the USB cable and power, then try again.",
+  },
+  DEVICE_RESPONDED_INCOMPLETE: {
+    title: "No response",
+    message: "The device responded, but not completely. Nothing was changed.",
+    deviceSafe: true,
+    nextAction: "Check the USB cable and power, then try again.",
+  },
+  MALFORMED_REPLY: {
+    title: "Could not identify device",
+    message: "The connected device responded, but it could not be identified safely. Nothing was changed.",
+    deviceSafe: true,
+    nextAction: "Try again, or use a different cable or port.",
+  },
+  DEVICE_DISCONNECTED: {
+    title: "Device disconnected",
+    message: "The device was disconnected. Nothing was changed.",
+    deviceSafe: true,
+    nextAction: "Reconnect it and try again.",
   },
   UPDATE_FAILED: {
     title: "We couldn't finish the update",

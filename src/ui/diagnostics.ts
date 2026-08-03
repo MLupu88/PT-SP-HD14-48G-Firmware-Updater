@@ -56,3 +56,11 @@ export function toDiagnosticRows(events: readonly UpdateEvent[]): DiagnosticRow[
 function row(timestamp: number, level: DiagnosticRow["level"], message: string): DiagnosticRow {
   return { timestamp, level, message };
 }
+
+/** Uppercase, space-separated hex dump for the bench-test diagnostic panel. */
+export function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join(" ")
+    .toUpperCase();
+}
