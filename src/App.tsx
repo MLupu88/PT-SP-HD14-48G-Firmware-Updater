@@ -80,7 +80,7 @@ export default function App() {
   return (
     <div className="shell">
       <header className="top-bar">
-        <Logo size={26} />
+        <Logo width={28} />
         {mode === "demo" && <DemoBadge />}
       </header>
 

@@ -182,18 +182,19 @@ input:focus-visible {
   max-width: 34ch;
 }
 
-/* Hero visual (Stage 1) */
+/* Logo */
 
-.hero-visual {
-  width: 140px;
-  height: 140px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-accent);
-  background: radial-gradient(circle at 50% 42%, var(--color-accent-soft), transparent 72%);
-  margin: 4px 0;
+.logo-img {
+  display: block;
+  height: auto;
+}
+
+/* Hero logo (Stage 1) — centered above the title, with its own generous
+   breathing room since it's the app's central visual identity. */
+
+.hero-logo {
+  width: 136px;
+  margin: 4px 0 10px;
 }
 
 /* Status line (Stage 2) */
@@ -477,9 +478,8 @@ input:focus-visible {
     gap: 14px;
   }
 
-  .hero-visual {
-    width: 112px;
-    height: 112px;
+  .hero-logo {
+    width: 100px;
   }
 
   .btn-large {

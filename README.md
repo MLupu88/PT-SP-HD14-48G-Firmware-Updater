@@ -1,4 +1,4 @@
-<img src="public/logo.svg" width="56" height="56" alt="Firmware Updater logo" />
+<img src="public/logo-mark.png" width="56" alt="Firmware Updater logo" />
 
 # PT-SP-HD14-48G Firmware Updater
 

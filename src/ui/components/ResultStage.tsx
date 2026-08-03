@@ -47,7 +47,7 @@ export function ResultStage({
     <section className="stage stage-result">
       {outcome === "completed" ? (
         <div className="result-mark check">
-          <Logo size={32} />
+          <Logo width={32} />
         </div>
       ) : (
         <div className={`result-mark ${outcome === "cancelled" ? "neutral" : "error"}`} aria-hidden="true">

@@ -20,12 +20,9 @@ export function ConnectStage({
 }: ConnectStageProps) {
   return (
     <section className="stage stage-connect">
+      <Logo className="hero-logo" />
       <h1 className="display-title">{PRODUCT_TITLE}</h1>
       <p className="stage-subtitle">{CONNECT_SUBTITLE}</p>
-
-      <div className="hero-visual" aria-hidden="true">
-        <Logo size={72} />
-      </div>
 
       <div className="stage-actions">
         <button
