@@ -1,0 +1,18 @@
+Firmware: MCU_MAIN_PT-SP-HD14-48G_V1.10.36.bin
+Size: 112340 bytes
+SHA-256: 2cd93d471afb01e4992e75219cd519e149a2219e781178762f39c8ae1866d01c
+Mode: 13 bytes
+Data packets: 110 x 1024 bytes (last padded with FF)
+Start frame:   A5 5B 08 07 00 00 00 00 00 00 00 00 F1
+Confirm frame: A5 5B 08 08 00 00 00 00 00 00 00 00 F0
+First data header: FE EF 00 00; checksum=AC
+Last data header:  FE EF 80 6D; checksum=0E
+Firmware: MCU_MAIN_PT-SP-HD14-48G_V1.10.36.bin
+Size: 112340 bytes
+SHA-256: 2cd93d471afb01e4992e75219cd519e149a2219e781178762f39c8ae1866d01c
+Mode: 18 bytes
+Data packets: 110 x 1024 bytes (last padded with FF)
+Start frame:   50 56 54 08 07 00 00 00 00 00 00 00 00 00 00 00 00 09
+Confirm frame: 50 56 54 08 08 00 00 00 00 00 00 00 00 00 00 00 00 0A
+First data header: FE EF 00 00; checksum=54
+Last data header:  FE EF 80 6D; checksum=F2

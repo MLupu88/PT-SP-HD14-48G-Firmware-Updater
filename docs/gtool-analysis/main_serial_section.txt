@@ -1,0 +1,256 @@
+C.Axios = Be;
+C.CanceledError = ne;
+C.CancelToken = ht;
+C.isCancel = en;
+C.VERSION = Ne;
+C.toFormData = Ve;
+C.AxiosError = h;
+C.Cancel = C.CanceledError;
+C.all = function(a) {
+  return Promise.all(a);
+};
+C.spread = bt;
+C.isAxiosError = gt;
+C.mergeConfig = re;
+C.AxiosHeaders = $;
+C.formToJSON = (e) => Qi(l.isHTMLForm(e) ? new FormData(e) : e);
+C.getAdapter = un.getAdapter;
+C.HttpStatusCode = yt;
+C.default = C;
+const Le = new Rn();
+let D = null, xe = !1, ae = "cmd", ve = null, Pe = "";
+T.on("change-byte-type", (e, a) => {
+  xe = a;
+});
+T.on("change-send-type", (e, a) => {
+  ae = a;
+});
+let hi, B = Buffer.from([]);
+T.on("connect-com", (e, a, i) => {
+  try {
+    D = new _i({
+      path: a,
+      baudRate: i,
+      autoOpen: !1,
+      stopBits: 1,
+      dataBits: 8,
+      highWaterMark: 2048
+    }), D.open((n) => {
+      B = Buffer.from([]), n ? e.reply("fail-connect-com", n) : (e.reply("reply-connect-com"), D.on("readable", () => {
+        const s = D.read();
+        B = Buffer.concat([B, s]);
+        let o = !1;
+        if (pa(Le.write(B), { strict: !0 }) && (o = !0), (B.byteLength === (xe ? 13 : 18) && ["upgrade", "version"].includes(ae) || Buffer.from(B).indexOf(Buffer.from(`\r
+`)) > -1 || mn(Le.write(B))) && (o = !0), !o)
+          return;
+        const t = B;
+        if (console.log(t.toString(), ae), ae === "cmd" && (xe ? 13 : 18) !== t.byteLength && (clearTimeout(hi), hi = setTimeout(() => {
+          const p = Le.write(Buffer.from(t));
+          Pe += `[${(/* @__PURE__ */ new Date()).toLocaleString()}] => ${p}
+`, e.reply("update-log", Pe), B = Buffer.from([]);
+        }, 200)), ae === "upgrade")
+          clearTimeout(ve), e.reply("reply-send-com-data", Buffer.from(t)), B = Buffer.from([]);
+        else if (ae === "version") {
+          clearTimeout(ve);
+          let p = "";
+          if ((xe ? 13 : 18) === t.byteLength) {
+            const m = xe ? 4 : 5, c = t[m + 2] < 10 ? `0${t[m + 2]}` : t[m + 2], r = t[m + 4] < 10 ? `0${t[m + 4]}` : t[m + 4];
+            p = `V${t[m]}.${c}.${r}`;
+          } else {
+            const m = Le.write(Buffer.from(t)), c = m.indexOf("FW version ");
+            c > -1 && (p = `V${m.slice(c + 11, c + 20)}`);
+          }
+          e.reply("reply-send-com-data", t), B = Buffer.from([]);
+        } else
+          ae === "json" && (console.log(t.toString()), pa(t.toString(), { strict: !0 }) && (clearTimeout(ve), e.reply("reply-send-com-data", pa(t.toString(), { strict: !0 }))), B = Buffer.from([]));
+      }));
+    }), D.on("close", () => {
+      clearTimeout(ve), e.reply("close-com"), e.reply("fail-send-com-data", "Disconnect com");
+    });
+  } catch (n) {
+    e.reply("fail-connect-com", n);
+  }
+});
+function pa(e, a = {}) {
+  const { multiple: i = !1, strict: n = !0, verbose: s = !1 } = a, o = [];
+  try {
+    const c = n ? JSON.parse(e) : bi(e);
+    if (c && typeof c == "object" && (o.push(c), !i))
+      return o[0];
+  } catch {
+  }
+  let t = -1, p = 0, u = !1, m = !1;
+  for (let c = 0; c < e.length; c++) {
+    const r = e[c];
+    if (u)
+      m ? m = !1 : r === "\\" ? m = !0 : r === '"' && (u = !1);
+    else if (r === '"')
+      u = !0;
+    else if (r === "{" || r === "[")
+      p === 0 && (t = c), p++;
+    else if ((r === "}" || r === "]") && (p--, p === 0 && t !== -1)) {
+      const d = e.substring(t, c + 1);
+      try {
+        const v = n ? JSON.parse(d) : bi(d);
+        if (v && (o.push(v), !i))
+          return v;
+      } catch (v) {
+        s && (console.warn(`Failed to parse candidate JSON: ${d}`), console.warn(v));
+      }
+      t = -1;
+    }
+  }
+  return o.length === 0 ? !1 : i ? o : o[0];
+}
+function bi(e) {
+  try {
+    const a = e.replace(/'/g, '"').replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*:)/g, '$1"$2"$3').replace(/:\s*([a-zA-Z_]\w*)(\s*[,\]}])/g, ':"$1"$2').replace(/,\s*([}\]])/g, "$1");
+    return JSON.parse(a);
+  } catch {
+    return null;
+  }
+}
+function mn(e) {
+  if (typeof e == "string")
+    try {
+      const a = JSON.parse(e);
+      return !!(typeof a == "object" && a);
+    } catch {
+      return !1;
+    }
+  return !1;
+}
+T.on("send-com-data", (e, a, i) => {
+  try {
+    D && D.isOpen ? (B = Buffer.from([]), D.write(a), ve = setTimeout(() => {
+      B = Buffer.from([]), e.reply("fail-send-com-data", "Timeout");
+    }, i ?? 2e3)) : e.reply("fail-send-com-data", "Serial port disconnected");
+  } catch (n) {
+    e.reply("fail-send-com-data", n);
+  }
+});
+T.on("disconnect-com", () => {
+  D && D.isOpen && D.close(), D = null;
+});
+T.on("send-tcp-data", (e, a, i) => {
+  const n = new Sn();
+  let s = Buffer.from([]);
+  n.connect({
+    host: a,
+    port: i.tcpPort
+  });
+  const o = setTimeout(() => {
+    e.reply("fail-send-tcp-data"), n.destroy();
+  }, i.timeout ?? 2e3);
+  n.write(i.data), n.on("data", (t) => {
+    if (s = Buffer.concat([s, t]), i.isGetJson) {
+      const p = s.toString();
+      mn(p) && (e.reply("reply-send-tcp-data", JSON.parse(p)), n.destroy(), clearTimeout(o), s = Buffer.from([]));
+    } else
+      e.reply("reply-send-tcp-data", s), n.destroy(), clearTimeout(o), s = Buffer.from([]);
+  }), n.on("close", () => {
+    clearTimeout(o);
+  });
+});
+T.on("sftp-upload-file", (e, a, i) => {
+  const n = `${H.getPath("userData")}\\${kn(i.remoteStatic)}`;
+  wa.writeFile(n, i.localStatic, (s) => {
+    if (s)
+      return e.reply("fail-sftp-upload-file", s);
+    const o = new Cn();
+    o.connect(a).then(async () => {
+      try {
+        const t = await o.fastPut(n, i.remoteStatic);
+        await o.end(), e.reply("reply-sftp-upload-file");
+      } catch (t) {
+        console.log(t);
+      }
+    }).catch((t) => {
+      I.error(t), e.reply("fail-sftp-upload-file", t);
+    });
+  });
+});
+const Je = C.create({
+  baseURL: "",
+  // api的base_url
+  headers: {
+    "Content-Type": "application/x-www-form-urlencoded"
+  },
+  timeout: 5e3
+  // 请求超时时间
+});
+Je.interceptors.request.use((e) => e, (e) => Promise.reject(e));
+Je.interceptors.response.use((e) => e.data, (e) => Promise.reject(e));
+T.on("http-send-upgrade-cmd", (e, a, i, n) => {
+  I.info(`http send => http://${a}/cgi-bin/instr?cmd=${i}&_=${(/* @__PURE__ */ new Date()).getTime()}`), console.log(), Je({
+    url: `http://${a}/cgi-bin/instr?cmd=${i}&_=${(/* @__PURE__ */ new Date()).getTime()}`,
+    method: "get",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    timeout: n
+  }).then((s) => {
+    I.info(`http reply(http://${a}/cgi-bin/instr?cmd=${i}&_=${(/* @__PURE__ */ new Date()).getTime()}) => ${s}`), e.reply("reply-http-send-upgrade-cmd", s);
+  }).catch((s) => {
+    I.error(`http fail(http://${a}/cgi-bin/instr?cmd=${i}&_=${(/* @__PURE__ */ new Date()).getTime()}) => ${s}`), e.reply("reply-http-send-upgrade-cmd", s);
+  });
+});
+T.on("http-send-upgrade-query", (e, a, i) => {
+  I.info(`http send => http://${a}/cgi-bin/query?_=${(/* @__PURE__ */ new Date()).getTime()}`), Je({
+    url: `http://${a}/cgi-bin/query?_=${(/* @__PURE__ */ new Date()).getTime()}`,
+    method: "get",
+    timeout: i
+  }).then((n) => {
+    I.info(`http reply(http://${a}/cgi-bin/query?_=${(/* @__PURE__ */ new Date()).getTime()}) => ${n}`), e.reply("reply-http-send-upgrade-query", n);
+  }).catch((n) => {
+    I.error(`http fail(http://${a}/cgi-bin/query?_=${(/* @__PURE__ */ new Date()).getTime()}) => ${n}`), e.reply("reply-http-send-upgrade-query", n);
+  });
+});
+T.on("get-port-list", async (e) => {
+  try {
+    const a = await _i.list();
+    e.reply("reply-get-port-list", a);
+  } catch {
+    e.reply("reply-get-port-list", []);
+  }
+});
+const oe = /* @__PURE__ */ new Date(), Ke = `${la}_Log_${oe.getFullYear()}_${oe.getMonth() + 1}_${oe.getDate()}_${oe.getHours()}_${oe.getMinutes()}_${oe.getSeconds()}.log`, I = ki.create({ logId: Ke });
+I.transports.file.fileName = Ke;
+T.on("save-log", (e, a) => {
+  try {
+    wa.writeFileSync(a, Pe);
+  } catch (i) {
+    console.log(i);
+  }
+});
+T.on("clear-log", () => {
+  Pe = "";
+});
+T.on("getLogPath", (e) => {
+  e.sender.send("getLogPathReuslt", Ke);
+});
+T.on("open-log", () => {
+  console.log(H.getPath("logs")), gi.showItemInFolder(`${H.getPath("logs")}\\${Ke}`);
+});
+T.on("writeLog", (e, a) => {
+  I[a.type ?? "info"](a.content);
+});
+let qe;
+T.on("upgrade-rs02", (e, a, i) => {
+  clearInterval(qe);
+  let n = 0;
+  const s = a / 1e3;
+  qe = setInterval(() => {
+    const o = Math.min(Math.floor(n / s * 100), 100);
+    o >= 100 ? clearInterval(qe) : (n++, I.info(`${i} Send => Data frame ${n}`)), e.reply("upgrade-rs02-progress", o);
+  }, 1e3);
+});
+T.on("clear-upgrade-rs02", () => {
+  clearInterval(qe);
+});
+process.on("uncaughtException", (e) => {
+  I.error("Uncaught Exception:", e);
+});
+process.on("unhandledRejection", (e, a) => {
+  I.error("Unhandled Rejection at:", a, "reason:", e);
+});

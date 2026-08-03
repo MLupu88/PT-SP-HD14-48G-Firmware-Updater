@@ -1,0 +1,17 @@
+services:
+  firmware-updater:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_ENABLE_REAL_FLASHING: ${VITE_ENABLE_REAL_FLASHING:-false}
+    image: firmware-updater:local
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
