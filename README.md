@@ -1,4 +1,6 @@
-# Firmware Updater
+<img src="public/logo.svg" width="56" height="56" alt="Firmware Updater logo" />
+
+# PT-SP-HD14-48G Firmware Updater
 
 A browser-based firmware updater for the PureLink PT-SP-HD14-48G, built to
 eventually replace the Windows GTool firmware updater. Frontend-only:
@@ -8,14 +10,12 @@ server.**
 
 ## Design principle
 
-> Advanced firmware-update technology presented as a simple, guided consumer
-> experience.
-
 The protocol engine, state machine, and transport layer are built to the
-same rigor you'd expect from an engineering tool. The default interface
-hides all of that: no packet numbers, checksums, baud rates, or protocol
-jargon on the main screen. Anyone who needs that detail can open **Advanced
-details** at the bottom of the page.
+same rigor you'd expect from an engineering tool. The interface hides all
+of that: one screen, one decision, at a time — connect, choose firmware,
+confirm, update, done. No packet numbers, checksums, baud rates, or
+protocol jargon on the main screen; anyone who needs that detail can open
+**Technical details**, collapsed by default on every stage.
 
 ## Safety status
 
@@ -61,8 +61,8 @@ src/lib/webserial/       Typed Web Serial capability detection + transport
 src/ui/                  Consumer-facing React layer: a guided-flow hook
                           (useFirmwareUpdater) that talks to lib/*, plain-
                           language copy (copy.ts), a technical→readable
-                          diagnostics mapper (diagnostics.ts), and
-                          presentational components.
+                          diagnostics mapper (diagnostics.ts), and one
+                          presentational component per stage.
 ```
 
 `UpdateEngine` never imports React, and no UI component imports
@@ -71,18 +71,22 @@ src/ui/                  Consumer-facing React layer: a guided-flow hook
 
 ### Guided flow
 
-1. Check browser compatibility
-2. Connect the device (demo mode today; real device is a later phase)
-3. Choose the firmware file
-4. Automatic validation
-5. Readiness checklist
-6. Start the update
-7. Progress
-8. Success or a plain-language recovery screen
+One stage is visible at a time, each with a single dominant action:
 
-Technical details (protocol state, transport label, packet counts, the
-structured event log, and technical error codes) live behind the collapsed
-**Advanced details** panel, never on the main screen.
+1. **Connect** — browser compatibility is checked automatically; the user
+   connects a device (a later phase) or tries the demo.
+2. **Choose update** — confirms the connection, shows the device name and
+   installed version, and lets the user pick a firmware file.
+3. **Ready** — validation runs automatically; once it passes, the screen
+   summarizes the version change and offers one "Update firmware" action.
+4. **Updating** — a calm, full-focus progress screen. No packet counters,
+   no configuration panels.
+5. **Done** — a confident success screen (or a plain-language recovery
+   screen on failure/cancellation).
+
+Protocol state, transport label, packet counts, the structured event log,
+and technical error codes live behind a collapsed **Technical details**
+disclosure on stages 4 and 5 — never visible by default.
 
 ## Local development
 

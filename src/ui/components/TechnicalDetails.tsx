@@ -2,7 +2,7 @@ import type { UpdateEvent, UpdateProgress, UpdateState } from "../../lib/update-
 import type { ErrorPresentation } from "../copy";
 import { toDiagnosticRows } from "../diagnostics";
 
-interface AdvancedDetailsProps {
+interface TechnicalDetailsProps {
   readonly engineState: UpdateState;
   readonly progress: UpdateProgress | null;
   readonly transportLabel: string;
@@ -11,21 +11,26 @@ interface AdvancedDetailsProps {
   readonly realFlashingFlagEnabled: boolean;
 }
 
-export function AdvancedDetails({
+/**
+ * Fully collapsed by default. Every protocol term, engine state, transport
+ * label, packet count, and diagnostic event lives here so the guided flow
+ * above never has to mention them.
+ */
+export function TechnicalDetails({
   engineState,
   progress,
   transportLabel,
   events,
   runError,
   realFlashingFlagEnabled,
-}: AdvancedDetailsProps) {
+}: TechnicalDetailsProps) {
   const rows = toDiagnosticRows(events);
 
   return (
-    <details className="advanced-details">
+    <details className="technical-details">
       <summary>
-        Advanced details
-        <span aria-hidden="true">▾</span>
+        Technical details
+        <span aria-hidden="true">⌄</span>
       </summary>
       <div className="content">
         <div className="diagnostic-facts">

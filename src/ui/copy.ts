@@ -5,37 +5,38 @@ import type { UpdateState } from "../lib/update-engine";
  * deliberately separate from orchestration logic (`useFirmwareUpdater`) and
  * protocol internals (`src/lib/*`). Nothing in this file should mention
  * Web Serial, baud rate, packets, checksums, or other protocol terms —
- * that vocabulary belongs in `diagnostics.ts` and the Advanced details panel.
+ * that vocabulary belongs in `diagnostics.ts` and the Technical details panel.
  */
 
-export const PRODUCT_NAME = "Firmware Updater";
+export const PRODUCT_TITLE = "PT-SP-HD14-48G Firmware Updater";
 
-export const DESIGN_PRINCIPLE =
-  "Advanced firmware-update technology presented as a simple, guided consumer experience.";
+export const CONNECT_SUBTITLE = "Update your device directly from this browser. No software to install.";
 
-/** Primary status line shown during an active update, keyed by engine state. */
+export const DEMO_LABEL = "Demo";
+export const DEMO_EXPLANATION = "Explore the update process without connecting a device.";
+
+export const FIRMWARE_SOURCE_LINE = "Choose the firmware file provided for your device.";
+
+export const READY_LINE = "Your device is ready to update.";
+export const POWER_REMINDER = "Keep it connected to power during the update.";
+
+export const UPDATING_INSTRUCTION = "Keep the device powered and connected.";
+
+export const PRIVACY_FOOTER = "Firmware files stay on your device — nothing is uploaded.";
+
+export const CANCELLED_MESSAGE = "The update was stopped. Your device wasn't changed.";
+
+/** Status line shown during an active update, keyed by engine state. Only running states are used. */
 export const STATE_STATUS_TEXT: Partial<Record<UpdateState, string>> = {
-  validating: "Checking your firmware file",
-  ready: "Your device is ready to update",
   initializing: "Preparing the update",
   transferring: "Sending firmware",
   retrying: "Reconnecting to your device",
   finalizing: "Finishing installation",
   verifying: "Checking the new version",
-  completed: "Update complete",
-  failed: "We could not complete the update",
-  cancelled: "Update cancelled",
 };
 
 export const COMPATIBLE_BROWSER_MESSAGE =
   "This updater works in Google Chrome or Microsoft Edge on a Windows, Mac, or Linux computer.";
-
-export const DEMO_MODE_LABEL = "Demo mode — no changes will be made to your device";
-
-export const DO_NOT_DISCONNECT_WARNING =
-  "Keep your device powered on and connected until this finishes.";
-
-export const LEAVE_PAGE_WARNING = "An update is in progress. Leaving now may interrupt it.";
 
 export interface ErrorPresentation {
   readonly title: string;
@@ -48,47 +49,45 @@ export interface ErrorPresentation {
 const ERROR_PRESENTATIONS: Record<string, Omit<ErrorPresentation, "technicalCode">> = {
   TRANSPORT_FAILURE: {
     title: "Connection interrupted",
-    message:
-      "The connection was interrupted. Keep the device powered on, reconnect the USB cable, and try again.",
+    message: "The connection was interrupted.",
     deviceSafe: true,
-    nextAction: "Reconnect the device and start again.",
+    nextAction: "Keep the device powered on, reconnect the cable, and try again.",
   },
   RETRY_LIMIT_EXCEEDED: {
-    title: "Update did not go through",
-    message:
-      "Your device kept asking us to resend part of the update. Keep it powered on and try again.",
+    title: "Update didn't go through",
+    message: "Your device kept asking us to resend part of the update.",
     deviceSafe: true,
-    nextAction: "Try the update again without disconnecting the device.",
+    nextAction: "Keep it powered on and try again.",
   },
   PACKET_REJECTED: {
     title: "Device rejected the update",
-    message: "Your device did not accept part of the update. Don't disconnect it — try again.",
+    message: "Your device didn't accept part of the update.",
     deviceSafe: true,
-    nextAction: "Try the update again. If this keeps happening, contact support.",
+    nextAction: "Don't disconnect it — try again.",
   },
   UNPARSEABLE_REPLY: {
     title: "Unexpected response",
-    message: "We received an unexpected response from your device. Try the update again.",
+    message: "We received an unexpected response from your device.",
     deviceSafe: true,
-    nextAction: "Try the update again.",
+    nextAction: "Try again.",
   },
   VALIDATION_FAILED: {
     title: "This file doesn't look right",
-    message: "This file doesn't look like the right firmware for this device.",
+    message: "This doesn't look like the right firmware for this device.",
     deviceSafe: true,
-    nextAction: "Choose the correct firmware file and try again.",
+    nextAction: "Choose a different file.",
   },
   REAL_FLASHING_DISABLED: {
     title: "Not available yet",
-    message: "Connecting to a real device isn't available in this version. Try the demo instead.",
+    message: "Connecting a real device isn't available in this version.",
     deviceSafe: true,
-    nextAction: "Use demo mode to preview the update experience.",
+    nextAction: "Try the demo instead.",
   },
   UPDATE_FAILED: {
-    title: "Something went wrong",
-    message: "Something went wrong during the update. Keep the device powered on and try again.",
+    title: "We couldn't finish the update",
+    message: "Something interrupted the update.",
     deviceSafe: true,
-    nextAction: "Try the update again.",
+    nextAction: "Keep the device powered on and try again.",
   },
 };
 
