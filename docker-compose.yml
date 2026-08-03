@@ -6,8 +6,12 @@ services:
       args:
         VITE_ENABLE_REAL_FLASHING: ${VITE_ENABLE_REAL_FLASHING:-false}
     image: firmware-updater:local
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
+    networks:
+      n8n_network:
+        aliases:
+          - firmware-updater
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
@@ -15,3 +19,7 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+
+networks:
+  n8n_network:
+    external: true
