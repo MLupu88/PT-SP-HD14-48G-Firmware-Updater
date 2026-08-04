@@ -45,7 +45,20 @@ export type UpdateEvent =
   | { readonly type: "progress"; readonly progress: UpdateProgress; readonly timestamp: number }
   | { readonly type: "transport_error"; readonly code: string; readonly message: string; readonly timestamp: number }
   | { readonly type: "protocol_rejected"; readonly code: string; readonly message: string; readonly timestamp: number }
-  | { readonly type: "completed"; readonly timestamp: number }
+  | {
+      readonly type: "completed";
+      readonly timestamp: number;
+      /**
+       * Whether the post-update version query (best-effort, per recovered
+       * GTool behavior) succeeded. `false` means the firmware transfer
+       * itself still completed — the final packet was accepted — but
+       * verification is unavailable, not that the update failed. See
+       * README "Recovery model": never label this outcome as a plain
+       * failure.
+       */
+      readonly verified: boolean;
+      readonly verifiedVersion?: string;
+    }
   | { readonly type: "failed"; readonly code: string; readonly message: string; readonly timestamp: number }
   | { readonly type: "cancelled"; readonly timestamp: number };
 

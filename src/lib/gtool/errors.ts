@@ -33,3 +33,19 @@ export class UnsupportedReplyLengthError extends GToolProtocolError {
     super(`Unsupported reply length: ${length} bytes. Only 13 or 18 are defined.`);
   }
 }
+
+/**
+ * Raised by real-path firmware validation when a file would packetize into
+ * more packets than the recovered packet-index format can represent (see
+ * `MAX_REPRESENTABLE_PACKET_INDEX`). The demo simulator's firmware sizes
+ * never approach this limit, so this is only reachable through the
+ * strengthened real-path validator.
+ */
+export class PacketCountExceedsRepresentableIndexError extends GToolProtocolError {
+  constructor(totalPackets: number) {
+    super(
+      `Firmware packetizes into ${totalPackets} packets, which exceeds the largest index the recovered ` +
+        "packet-index format can represent.",
+    );
+  }
+}

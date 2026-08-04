@@ -52,3 +52,46 @@ export function validateMcuMainFirmware(file: FirmwareFile): McuMainValidationRe
   const plan = computePacketPlan(file.bytes.length);
   return { ok: true, flag, plan };
 }
+
+export interface RealFirmwareValidationOptions {
+  /** Exact product token the filename must contain, e.g. "PT-SP-HD14-48G". */
+  readonly requiredProductToken: string;
+}
+
+/**
+ * Stricter validation for the real (hardware-writing) path only. Layers
+ * additional checks around `validateMcuMainFirmware` — which the demo
+ * simulator keeps using unchanged — rather than replacing it, so demo mode's
+ * looser acceptance (no product-token or extension requirement) is
+ * unaffected.
+ *
+ * The representable-packet-index limit is *not* re-checked here: it is
+ * enforced structurally inside `computePacketPlan`
+ * (`src/lib/gtool/packetizer.ts`), which `validateMcuMainFirmware` below
+ * always calls — so this function (an earlier, real-path-only, friendlier
+ * checkpoint) and every other caller of the protocol library get the same
+ * protection from one place, rather than this function being the sole guard.
+ *
+ * @throws {FirmwareValidationError} if the file is empty or not a `.bin` file.
+ * @throws {UnsupportedModuleError} if the filename does not identify an
+ *   MCU_MAIN image, or does not contain the exact required product token.
+ * @throws {PacketCountExceedsRepresentableIndexError} if the firmware would
+ *   packetize into more packets than the recovered index format can address
+ *   (raised by `computePacketPlan` via `validateMcuMainFirmware` below).
+ */
+export function validateRealMcuMainFirmware(
+  file: FirmwareFile,
+  options: RealFirmwareValidationOptions,
+): McuMainValidationResult {
+  if (!file.name.toLowerCase().endsWith(".bin")) {
+    throw new FirmwareValidationError(`Firmware file "${file.name}" is not a .bin file.`);
+  }
+  if (!file.name.includes(options.requiredProductToken)) {
+    throw new UnsupportedModuleError(
+      `Firmware file "${file.name}" does not contain the exact product token ` +
+        `"${options.requiredProductToken}".`,
+    );
+  }
+
+  return validateMcuMainFirmware(file);
+}

@@ -20,10 +20,14 @@ export function toDiagnosticRows(events: readonly UpdateEvent[]): DiagnosticRow[
       case "log":
         return row(event.timestamp, event.level, event.message);
       case "packet_sent":
+        // "Attempting", not "Sent": this event fires before the transport
+        // write has resolved (see UpdateEngine.sendPacketWithRetries), so no
+        // reliable post-write signal exists yet to justify the past tense —
+        // see M1 (Phase 2B pre-commit safety review).
         return row(
           event.timestamp,
           "info",
-          `Sent packet ${event.packetIndex + 1}/${event.totalPackets} (attempt ${event.attempt})`,
+          `Attempting packet ${event.packetIndex + 1}/${event.totalPackets} (attempt ${event.attempt})`,
         );
       case "packet_accepted":
         return row(
@@ -44,7 +48,17 @@ export function toDiagnosticRows(events: readonly UpdateEvent[]): DiagnosticRow[
       case "protocol_rejected":
         return row(event.timestamp, "error", `Device rejected [${event.code}]: ${event.message}`);
       case "completed":
-        return row(event.timestamp, "info", "Update completed successfully");
+        // I2 (Phase 2B pre-commit safety review): never claim unconditional
+        // success here — `verified` distinguishes a confirmed installed
+        // version from a transfer that completed with no way to confirm it
+        // (see README "Recovery model").
+        return row(
+          event.timestamp,
+          "info",
+          event.verified
+            ? `Update completed and version verified (${event.verifiedVersion ?? "unknown"}).`
+            : "Firmware transferred; version verification unavailable.",
+        );
       case "failed":
         return row(event.timestamp, "error", `Failed [${event.code}]: ${event.message}`);
       case "cancelled":

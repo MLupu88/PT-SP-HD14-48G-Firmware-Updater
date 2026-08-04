@@ -6,6 +6,7 @@ services:
       args:
         VITE_ENABLE_REAL_FLASHING: ${VITE_ENABLE_REAL_FLASHING:-false}
         VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION: ${VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION:-false}
+        VITE_ENABLE_HARDWARE_VALIDATION_MODE: ${VITE_ENABLE_HARDWARE_VALIDATION_MODE:-false}
     image: firmware-updater:local
     expose:
       - "8080"

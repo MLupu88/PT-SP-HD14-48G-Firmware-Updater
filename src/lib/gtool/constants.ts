@@ -44,3 +44,14 @@ export const POST_FINAL_PACKET_DELAY_MS = 3_000;
 
 /** Delay GTool waits after reporting 100%, before re-querying firmware version. */
 export const POST_COMPLETE_SETTLE_DELAY_MS = 7_000;
+
+/**
+ * Largest packet index the recovered index format can represent. The final
+ * packet's high byte is OR'd with 0x80 (`FINAL_PACKET_FLAG`), so the
+ * unmarked high byte (`floor(index / 256)`) must leave that bit free, i.e.
+ * stay within one byte's low 7 bits (0-127). That caps the addressable
+ * index at 127 * 256 + 255 = 32767 (source: protocol_notes.md "Packet
+ * index is zero-based and split as `high = floor(index/256)`... add `0x80`
+ * on the final packet").
+ */
+export const MAX_REPRESENTABLE_PACKET_INDEX = 0x7fff;

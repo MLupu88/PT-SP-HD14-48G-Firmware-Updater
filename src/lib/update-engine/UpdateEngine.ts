@@ -29,6 +29,26 @@ import type { UpdateEvent, UpdateEventListener, UpdateProgress, UpdateState } fr
 /** Internal signal used to unwind out of a packet retry loop when `cancel()` is called mid-wait. */
 class CancellationSignal extends Error {}
 
+/**
+ * Reads a duck-typed `.code` off a thrown error (e.g. from
+ * `WebSerialTransport`'s error classes — see `readOnlyErrors.ts` /
+ * `transportErrors.ts`) without importing any webserial-specific class here,
+ * keeping this engine framework-independent. Falls back to a generic code
+ * when the thrown value carries none (e.g. a plain `Error` from the
+ * simulator), preserving prior behavior exactly for existing callers.
+ */
+function errorCodeOf(error: unknown, fallback: string): string {
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof (error as { code: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+  return fallback;
+}
+
 const ALLOWED_TRANSITIONS: Record<UpdateState, readonly UpdateState[]> = {
   idle: ["firmware_loaded"],
   firmware_loaded: ["validating", "idle"],
@@ -268,11 +288,21 @@ export class UpdateEngine {
       await this.wait(this.postCompleteSettleDelayMs);
 
       this.transition("verifying");
-      await this.verifyBestEffort();
+      const verification = await this.verifyBestEffort();
 
       this.transition("completed");
-      this.log("info", "Update completed successfully.");
-      this.emit({ type: "completed", timestamp: this.now() });
+      this.log(
+        "info",
+        verification.verified
+          ? `Update completed successfully; installed version verified (${verification.version ?? "unknown"}).`
+          : "Update completed; installed version could not be verified.",
+      );
+      this.emit({
+        type: "completed",
+        timestamp: this.now(),
+        verified: verification.verified,
+        verifiedVersion: verification.version,
+      });
     } catch (error) {
       // `this.state` is widened explicitly here: TypeScript's control-flow
       // analysis otherwise keeps treating it as narrowed to "ready" from the
@@ -288,7 +318,7 @@ export class UpdateEngine {
       }
       if (stateAtCatch !== "failed" && stateAtCatch !== "cancelled") {
         const message = error instanceof Error ? error.message : String(error);
-        this.fail("UPDATE_FAILED", message);
+        this.fail(errorCodeOf(error, "UPDATE_FAILED"), message);
       }
     } finally {
       this.updateInFlight = false;
@@ -343,10 +373,11 @@ export class UpdateEngine {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        const code = errorCodeOf(error, "TRANSPORT_FAILURE");
         if (attempt >= this.maxRetriesPerPacket) {
-          this.emit({ type: "transport_error", code: "TRANSPORT_FAILURE", message, timestamp: this.now() });
-          this.fail("TRANSPORT_FAILURE", message);
-          throw new TransportError("TRANSPORT_FAILURE", message);
+          this.emit({ type: "transport_error", code, message, timestamp: this.now() });
+          this.fail(code, message);
+          throw new TransportError(code, message);
         }
         await this.retryPacket(packetIndex, attempt, `Transport error: ${message}`);
         continue;
@@ -413,18 +444,58 @@ export class UpdateEngine {
     this.transition("transferring");
   }
 
-  private async verifyBestEffort(): Promise<void> {
+  /**
+   * Best-effort post-update version query. Never throws: a failure here
+   * means "transfer completed, verification unavailable" — a distinct,
+   * honestly-labeled outcome from a real failure — not a fatal error (see
+   * README "Recovery model" and "Do not declare success merely because the
+   * last packet was written" in the Phase 2B spec, which this satisfies by
+   * making that distinction explicit in the returned `verified` flag rather
+   * than collapsing both into a single "completed").
+   *
+   * `verified: true` requires more than "a reply of plausible length
+   * arrived" — it requires the reply to actually be trustworthy: correctly
+   * framed (13/18 bytes, mirroring `readBoundedReply`'s own completion
+   * check) AND checksum-valid, exactly like `interpretCompleteReply` already
+   * requires for the pre-update identity check in
+   * `src/lib/webserial/deviceIdentity.ts`. A reply that parses structurally
+   * but fails its checksum is not proof of anything and must not be
+   * presented as a confirmed installed version — it is reported as
+   * unverified, same as a timeout or disconnect.
+   */
+  private async verifyBestEffort(): Promise<{ verified: boolean; version?: string }> {
+    let raw: Uint8Array;
     try {
       const command = buildVersionQueryCommand(this.mode, "primary");
-      const raw = await this.transport.sendAndReceive(command, { timeoutMs: this.responseTimeoutMs });
-      const version = parseVersionReply(raw, "full");
-      this.log("info", `Post-update version query: ${version.versionString}.`);
+      raw = await this.transport.sendAndReceive(command, { timeoutMs: this.responseTimeoutMs });
     } catch (error) {
       // Mirrors GTool: the version re-query after upgrade runs best-effort
       // and does not gate the "Upgrade successfully" outcome.
       const message = error instanceof Error ? error.message : String(error);
       this.log("warn", `Post-update version query failed (non-fatal): ${message}`);
+      return { verified: false };
     }
+
+    let reply;
+    try {
+      reply = parseReply(raw);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log("warn", `Post-update version reply was malformed (non-fatal): ${message}`);
+      return { verified: false };
+    }
+
+    if (!reply.checksumValid) {
+      this.log(
+        "warn",
+        "Post-update version reply failed checksum verification (non-fatal): treated as unverified, not trusted.",
+      );
+      return { verified: false };
+    }
+
+    const version = parseVersionReply(raw, "full");
+    this.log("info", `Post-update version query: ${version.versionString}.`);
+    return { verified: true, version: version.versionString };
   }
 
   private fail(code: string, message: string): void {

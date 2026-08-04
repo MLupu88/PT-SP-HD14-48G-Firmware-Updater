@@ -471,6 +471,58 @@ input:focus-visible {
   border-radius: 6px;
 }
 
+/* Hardware validation mode (Phase 2B bench path) */
+
+.status-dot.warn {
+  background: var(--color-danger);
+}
+
+.hint-text.warn {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.hardware-validation-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.hardware-validation-checklist label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+.hardware-validation-checklist input[type="checkbox"] {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
+.hardware-validation-confirm-label {
+  font-size: 0.82rem;
+  color: var(--color-text-faint);
+}
+
+.hardware-validation-confirm-input {
+  width: 100%;
+  max-width: 260px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: center;
+}
+
 /* Responsive */
 
 @media (max-width: 480px) {

@@ -1,5 +1,5 @@
-import type { UpdateEvent, UpdateProgress, UpdateState } from "../../lib/update-engine";
-import { CANCELLED_MESSAGE } from "../copy";
+import type { RecoveryOutcome, UpdateEvent, UpdateProgress, UpdateState } from "../../lib/update-engine";
+import { CANCELLED_MESSAGE, UPDATE_TRANSFERRED_UNVERIFIED_MESSAGE, UPDATE_TRANSFERRED_UNVERIFIED_TITLE } from "../copy";
 import type { ErrorPresentation } from "../copy";
 import { Logo } from "./Logo";
 import { TechnicalDetails } from "./TechnicalDetails";
@@ -14,6 +14,16 @@ interface ResultStageProps {
   readonly transportLabel: string;
   readonly events: readonly UpdateEvent[];
   readonly realFlashingFlagEnabled: boolean;
+  /**
+   * `null` unless `outcome === "completed"`. `false` means the transfer
+   * itself succeeded (the final packet was accepted) but the best-effort
+   * post-update version query could not confirm it — a distinct, still
+   * successful outcome, never shown as a failure (see README "Recovery model").
+   */
+  readonly verified: boolean | null;
+  /** True only for a real-hardware run whose failure did not occur before destructive initialization began. */
+  readonly isRealHardwareRun: boolean;
+  readonly recoveryOutcome: RecoveryOutcome | null;
 }
 
 export function ResultStage({
@@ -26,16 +36,23 @@ export function ResultStage({
   transportLabel,
   events,
   realFlashingFlagEnabled,
+  verified,
+  isRealHardwareRun,
+  recoveryOutcome,
 }: ResultStageProps) {
-  const title =
-    outcome === "completed"
+  const unverified = outcome === "completed" && verified === false;
+
+  const title = unverified
+    ? UPDATE_TRANSFERRED_UNVERIFIED_TITLE
+    : outcome === "completed"
       ? "Update complete"
       : outcome === "cancelled"
         ? "Update cancelled"
         : (error?.title ?? "We couldn't finish the update");
 
-  const message =
-    outcome === "completed"
+  const message = unverified
+    ? UPDATE_TRANSFERRED_UNVERIFIED_MESSAGE
+    : outcome === "completed"
       ? installedVersion
         ? `${installedVersion} is installed.`
         : "Your device is up to date."
@@ -43,11 +60,17 @@ export function ResultStage({
         ? CANCELLED_MESSAGE
         : error?.message;
 
+  // Never offered as an automatic retry for a real hardware run unless the
+  // failure happened before any destructive command was sent — see README
+  // "Recovery model": only "safe_to_retry" gets a "Try again" action.
+  const offerAutomaticRetry =
+    outcome === "failed" && (!isRealHardwareRun || recoveryOutcome === "safe_to_retry");
+
   return (
     <section className="stage stage-result">
       {outcome === "completed" ? (
-        <div className="result-mark check">
-          <Logo width={32} />
+        <div className={`result-mark ${unverified ? "neutral" : "check"}`}>
+          {unverified ? "?" : <Logo width={32} />}
         </div>
       ) : (
         <div className={`result-mark ${outcome === "cancelled" ? "neutral" : "error"}`} aria-hidden="true">
@@ -61,7 +84,7 @@ export function ResultStage({
 
       <div className="stage-actions">
         <button type="button" className="btn-primary btn-large" onClick={onDone}>
-          {outcome === "completed" ? "Done" : "Try again"}
+          {outcome === "failed" && offerAutomaticRetry ? "Try again" : "Done"}
         </button>
       </div>
 

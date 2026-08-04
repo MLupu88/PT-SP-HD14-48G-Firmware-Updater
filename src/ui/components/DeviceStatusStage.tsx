@@ -5,10 +5,19 @@ import type { RealConnectionPhase } from "../hooks/useFirmwareUpdater";
 interface DeviceStatusStageProps {
   readonly phase: RealConnectionPhase;
   readonly deviceIdentity: DeviceIdentityResult | null;
+  /** All three Phase 2B safety flags are true — the "Hardware validation mode" bench path exists in this build. */
+  readonly hardwareValidationAvailable: boolean;
   readonly onDisconnect: () => void;
+  readonly onContinueToHardwareValidation: () => void;
 }
 
-export function DeviceStatusStage({ phase, deviceIdentity, onDisconnect }: DeviceStatusStageProps) {
+export function DeviceStatusStage({
+  phase,
+  deviceIdentity,
+  hardwareValidationAvailable,
+  onDisconnect,
+  onContinueToHardwareValidation,
+}: DeviceStatusStageProps) {
   if (phase !== "done") {
     return (
       <section className="stage stage-device-status">
@@ -19,8 +28,12 @@ export function DeviceStatusStage({ phase, deviceIdentity, onDisconnect }: Devic
     );
   }
 
+  // `compatible` can never be true from this reply alone — see README
+  // "Phase 2A". The heading stays honestly non-committal either way; only a
+  // checksum-valid reply (not a specific model claim) unlocks the bench path.
   const identified = deviceIdentity?.compatible ?? false;
   const heading = identified ? DEVICE_IDENTIFIED_HEADING : DEVICE_UNIDENTIFIED_HEADING;
+  const canOfferHardwareValidation = hardwareValidationAvailable && (deviceIdentity?.checksumValid ?? false);
 
   return (
     <section className="stage stage-device-status">
@@ -34,11 +47,11 @@ export function DeviceStatusStage({ phase, deviceIdentity, onDisconnect }: Devic
       {deviceIdentity && <p className="stage-subtitle">{deviceIdentity.deviceLabel}</p>}
 
       <div className="stage-actions">
-        {/* Only rendered once a genuine model match exists (DeviceIdentityResult.compatible).
-            The recovered version-query reply carries no device/model name field, so this can
-            never be true in Phase 2A — see README "Phase 2A". Kept for forward-compatibility;
-            intentionally not wired to firmware transfer regardless. */}
-        {identified && (
+        {canOfferHardwareValidation ? (
+          <button type="button" className="btn-primary btn-large" onClick={onContinueToHardwareValidation}>
+            Continue to hardware validation
+          </button>
+        ) : (
           <button
             type="button"
             className="btn-primary btn-large"

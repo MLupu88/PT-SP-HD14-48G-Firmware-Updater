@@ -7,14 +7,15 @@ import {
   REFERENCE_TOTAL_PACKETS,
   makeSyntheticFirmwareBytes,
 } from "../../../test/fixtures";
-import { PADDING_BYTE, PAYLOAD_BLOCK_SIZE } from "../constants";
-import { PacketIndexOutOfRangeError } from "../errors";
+import { MAX_REPRESENTABLE_PACKET_INDEX, PADDING_BYTE, PAYLOAD_BLOCK_SIZE } from "../constants";
+import { PacketCountExceedsRepresentableIndexError, PacketIndexOutOfRangeError } from "../errors";
 import {
   computePacketPlan,
   encodePacketIndex,
   getPayloadBlock,
   packetProgressPercent,
 } from "../packetizer";
+import type { PacketPlan } from "../types";
 
 describe("computePacketPlan", () => {
   it("produces exactly 110 packets for the documented 112,340-byte firmware", () => {
@@ -34,6 +35,29 @@ describe("computePacketPlan", () => {
 
   it("rejects an empty firmware", () => {
     expect(() => computePacketPlan(0)).toThrow(/empty/i);
+  });
+
+  /**
+   * C2 (pre-commit safety review): the representable-packet-index limit
+   * must be enforced structurally here — the earliest, framework-independent
+   * shared protocol function — not only by a real-path-specific UI check,
+   * so every caller (demo or real) is protected regardless of how it got
+   * here.
+   */
+  describe("representable packet-index boundary (C2)", () => {
+    it("accepts a firmware that packetizes into exactly the maximum representable packet count", () => {
+      const maxTotalPackets = MAX_REPRESENTABLE_PACKET_INDEX + 1; // 32768
+      const length = maxTotalPackets * PAYLOAD_BLOCK_SIZE;
+      const plan = computePacketPlan(length);
+      expect(plan.totalPackets).toBe(maxTotalPackets);
+      expect(plan.finalPacketIndex).toBe(MAX_REPRESENTABLE_PACKET_INDEX);
+    });
+
+    it("rejects a firmware that would need one packet more than the maximum", () => {
+      const maxTotalPackets = MAX_REPRESENTABLE_PACKET_INDEX + 1; // 32768
+      const length = maxTotalPackets * PAYLOAD_BLOCK_SIZE + 1; // one byte over -> one packet over
+      expect(() => computePacketPlan(length)).toThrow(PacketCountExceedsRepresentableIndexError);
+    });
   });
 });
 
@@ -68,6 +92,38 @@ describe("encodePacketIndex", () => {
   it("throws for an out-of-range packet index", () => {
     expect(() => encodePacketIndex(-1, plan)).toThrow(PacketIndexOutOfRangeError);
     expect(() => encodePacketIndex(plan.totalPackets, plan)).toThrow(PacketIndexOutOfRangeError);
+  });
+
+  describe("representable packet-index boundary (C2)", () => {
+    it("encodes the final valid index (32767) unambiguously as high=0xFF low=0xFF", () => {
+      const maxTotalPackets = MAX_REPRESENTABLE_PACKET_INDEX + 1; // 32768
+      const boundaryPlan = computePacketPlan(maxTotalPackets * PAYLOAD_BLOCK_SIZE);
+      expect(boundaryPlan.finalPacketIndex).toBe(MAX_REPRESENTABLE_PACKET_INDEX);
+      const encoding = encodePacketIndex(MAX_REPRESENTABLE_PACKET_INDEX, boundaryPlan);
+      // high = floor(32767/256)=127=0x7F, OR'd with the final flag 0x80 -> 0xFF.
+      // Unambiguous: masking back off the flag (0xFF & 0x7F) recovers exactly 127.
+      expect(encoding).toEqual({ high: 0xff, low: 0xff, isFinal: true });
+      expect(encoding.high & 0x7f).toBe(0x7f);
+    });
+
+    it("refuses to encode a non-final packet index whose high byte would collide with the final-packet flag", () => {
+      // A hand-built (not computePacketPlan-derived) plan, simulating a
+      // caller that bypasses the protocol-level guard in computePacketPlan.
+      // Index 32768 is NOT final in this plan, yet floor(32768/256) = 128 =
+      // 0x80 — exactly FINAL_PACKET_FLAG. encodePacketIndex must refuse
+      // this outright rather than silently emitting an indistinguishable
+      // "final packet, index 0" frame.
+      const overflowingPlan: PacketPlan = {
+        firmwareLength: (MAX_REPRESENTABLE_PACKET_INDEX + 3) * PAYLOAD_BLOCK_SIZE,
+        totalPackets: MAX_REPRESENTABLE_PACKET_INDEX + 3,
+        finalPacketIndex: MAX_REPRESENTABLE_PACKET_INDEX + 2,
+        finalPacketRealByteCount: PAYLOAD_BLOCK_SIZE,
+        finalPacketPaddingCount: 0,
+      };
+      expect(() => encodePacketIndex(MAX_REPRESENTABLE_PACKET_INDEX + 1, overflowingPlan)).toThrow(
+        PacketIndexOutOfRangeError,
+      );
+    });
   });
 });
 

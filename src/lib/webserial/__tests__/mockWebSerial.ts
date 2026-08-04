@@ -8,6 +8,25 @@
 export interface MockSerialPortOptions {
   readonly usbVendorId?: number;
   readonly usbProductId?: number;
+  /**
+   * Invoked synchronously inside the writable stream's sink for every write
+   * — lets a test auto-respond (e.g. `port.emit(acceptedReply)`) without
+   * hand-scheduling a `setTimeout` per packet. Because `ReadableStream`
+   * buffers `enqueue()`d chunks internally, this is safe to call even
+   * before a reader is attached for the next read.
+   */
+  readonly onWrite?: (chunk: Uint8Array) => void;
+  /**
+   * Makes the writable sink accept the chunk but never settle its write
+   * promise, simulating a wedged USB-serial adapter (or hardware flow
+   * control asserted and never released). Used to exercise the bounded
+   * write phase; the chunk is still recorded in `writtenChunks` so a test
+   * can assert what was *attempted*. `true` stalls every write; a predicate
+   * stalls only the chunks it returns `true` for (e.g. one specific data
+   * packet), letting a test prove writes before/after the stall still
+   * behave normally.
+   */
+  readonly stallWrites?: boolean | ((chunk: Uint8Array) => boolean);
 }
 
 export class MockSerialPort extends EventTarget implements SerialPort {
@@ -18,10 +37,16 @@ export class MockSerialPort extends EventTarget implements SerialPort {
   private _readable: ReadableStream<Uint8Array> | null = null;
   private _writable: WritableStream<Uint8Array> | null = null;
   private readonly info: SerialPortInfo;
+  private readonly onWrite?: (chunk: Uint8Array) => void;
+  private readonly stallWrites: boolean | ((chunk: Uint8Array) => boolean);
+  /** Set when an aborted stream tears down the sink, so tests can assert the abandoned write was cancelled. */
+  aborted = false;
 
   constructor(options: MockSerialPortOptions = {}) {
     super();
     this.info = { usbVendorId: options.usbVendorId, usbProductId: options.usbProductId };
+    this.onWrite = options.onWrite;
+    this.stallWrites = options.stallWrites ?? false;
   }
 
   getInfo(): SerialPortInfo {
@@ -44,8 +69,29 @@ export class MockSerialPort extends EventTarget implements SerialPort {
       },
     });
     this._writable = new WritableStream<Uint8Array>({
-      write: (chunk) => {
+      write: (chunk, controller) => {
         this.writtenChunks.push(chunk);
+        this.onWrite?.(chunk);
+        const shouldStall =
+          typeof this.stallWrites === "function" ? this.stallWrites(chunk) : this.stallWrites;
+        if (shouldStall) {
+          // Never settles on its own — simulates a wedged adapter that took
+          // the chunk and went silent. Still reacts to `controller.signal`,
+          // which the stream aborts the moment `writer.abort()` is called
+          // even with this write still in flight: that's what lets a real
+          // driver (and this mock) cancel an in-flight transfer rather than
+          // waiting for it to finish on its own, which for a genuinely
+          // wedged port would be never.
+          return new Promise<void>((_resolve, reject) => {
+            controller.signal.addEventListener("abort", () => {
+              reject(controller.signal.reason);
+            });
+          });
+        }
+        return undefined;
+      },
+      abort: () => {
+        this.aborted = true;
       },
     });
   }
