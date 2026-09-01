@@ -1,601 +1,566 @@
-<img src="public/logo-mark.png" width="56" alt="Firmware Updater logo" />
+<p align="center">
+  <img src="public/logo-mark.png" width="155" alt="PT-SP-HD14-48G Firmware Updater">
+</p>
 
-# PT-SP-HD14-48G Firmware Updater
+<h1 align="center">PT-SP-HD14-48G Firmware Updater</h1>
 
-A browser-based firmware updater for the PureLink PT-SP-HD14-48G, built to
-eventually replace the Windows GTool firmware updater. Frontend-only:
-firmware update commands travel over the Web Serial API directly between the
-browser and the connected device. **Firmware files are never uploaded to a
-server.**
+<p align="center">
+  A modern, browser-based firmware updater for the PureTools PT-SP-HD14-48G HDMI splitter.
+  No desktop utility, no mystery progress bars, and no pretending that firmware updates need to feel like they were designed in 1995.
+</p>
 
-## Design principle
+<p align="center">
+  <a href="https://negruhd1448.aiexperiments.eu"><strong>Open the live app →</strong></a>
+</p>
 
-The protocol engine, state machine, and transport layer are built to the
-same rigor you'd expect from an engineering tool. The interface hides all
-of that: one screen, one decision, at a time — connect, choose firmware,
-confirm, update, done. No packet numbers, checksums, baud rates, or
-protocol jargon on the main screen; anyone who needs that detail can open
-**Technical details**, collapsed by default on every stage.
+<p align="center">
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=black" alt="React">
+  <img src="https://img.shields.io/badge/Web%20Serial-Chromium-4285F4?logo=googlechrome&logoColor=white" alt="Web Serial">
+  <img src="https://img.shields.io/badge/tests-196%20passing-brightgreen" alt="196 tests passing">
+  <img src="https://img.shields.io/badge/hardware%20validation-pending-orange" alt="Hardware validation pending">
+</p>
 
-## Safety status
+---
 
-**Real firmware flashing is disabled in this build.** As of Phase 2B, the
-real, firmware-writing transport is fully implemented and tested — but it
-is software-complete and **hardware-unvalidated**: no physical
-PT-SP-HD14-48G has ever been connected. It stays completely unreachable
-unless all three of the following are `"true"` at once (see "Phase 2B"
-below for the full detail):
+## Why this exists
 
-- `VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION`
-- `VITE_ENABLE_REAL_FLASHING`
-- `VITE_ENABLE_HARDWARE_VALIDATION_MODE`
+This project started because updating the firmware on the **PureTools PT-SP-HD14-48G** was much more painful than it had any reason to be.
 
-All three default to `"false"` everywhere (`.env.example`, `Dockerfile`,
-`docker-compose.yml`), and this gate is checked as a single function,
-`isRealFirmwareTransferEnabled()`, at the top of every method on
-`WebSerialTransport` — not scattered across the codebase — so no one or
-two flags can make firmware writing reachable. The only way to run a full
-update end-to-end with the default (all-`false`) build is **demo mode**,
-which uses a fully offline, deterministic simulator (`src/lib/simulator`)
-and never touches Web Serial.
+The device uses a desktop application called **GTool** for firmware updates. It does the job, but the experience feels like something from another era: download a utility, connect the hardware, work your way through an awkward interface, select a binary file, press the right button, and then spend the next few minutes wondering whether the box is actually doing what you think it is doing.
 
-The recovered protocol itself is also flagged as hardware-unvalidated. See
-`docs/gtool-analysis/GTool_2.0.6_protocol_notes.md` → "What is not yet
-proven", and "Phase 2B" below → "What is proven vs. not proven", for the
-specific open items that must be resolved with a real device before any
-public build enables these flags.
+It felt less like using a modern product and more like performing maintenance on one.
 
-## Phase 2A: read-only device connection
+I kept thinking that firmware updating should not have to feel this way.
 
-**Status: implemented, disabled by default.** This phase adds a real,
-read-only connection to a physical PT-SP-HD14-48G over Web Serial — port
-selection, opening, and a single harmless version query — so the device's
-identity and installed firmware version can be read without writing
-anything. **It does not implement firmware transfer.**
+It should feel more like the kind of hardware/software experience Apple made people expect: connect the device, immediately understand its state, choose the update, know exactly what is about to happen, press one clear button, see meaningful progress, and know when the process is actually finished.
 
-### The flag
+The technical complexity can still exist underneath. The person using the product should not have to absorb all of it.
 
-```
-VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION=false
-```
+So that became the goal:
 
-- Defaults to `false` everywhere, including production Docker builds (see
-  `Dockerfile` / `docker-compose.yml`, which now pass this through as a
-  second, independently-defaulted build arg).
-- When `true`, the **Connect device** button on a supported browser
-  requests a real serial port, opens it with the parameters below, and
-  sends only the recovered version-query command
-  (`docs/gtool-analysis/protocol_section.js`, function `ge()`) — `A5 5B 01
-  13 00×8 [checksum]` in 13-byte mode — to read back the installed
-  firmware version.
-- **Completely independent from `VITE_ENABLE_REAL_FLASHING`, and never
-  bypasses it.** Turning this flag on does not enable firmware writing.
-  `src/lib/webserial/ReadOnlyDeviceConnection.ts` has no method capable of
-  sending arbitrary bytes — `connect()`, `queryDeviceIdentity()`, and
-  `disconnect()` are its entire public surface, and the only write it can
-  ever perform is the exact version-query command above (locked in by
-  `src/lib/webserial/__tests__/ReadOnlyDeviceConnection.test.ts`, "exposes
-  no method beyond..."). Firmware initialization (`08 07`/`08 08`) and `FE
-  EF` data packets can only be sent through `UpdateEngine` +
-  `WebSerialTransport`, which Phase 2A does not touch —
-  `WebSerialTransport.connect()`/`sendAndReceive()` still unconditionally
-  reject, regardless of this flag (locked in by
-  `src/lib/webserial/__tests__/WebSerialTransport.test.ts`).
-- The production site remains demo-only until a later, explicitly approved
-  build turns this on.
+> **What would this firmware updater look like if the experience had been designed first, rather than added afterward?**
 
-### Enabling it locally
+Initially I thought that might simply mean building a better interface around the existing process.
 
-Create `.env.local` (already covered by `.gitignore` — **never commit
-it**):
+It turned out to be more interesting than that.
 
-```
-VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION=true
+The original GTool application was responsible for the actual conversation with the HDMI splitter, so replacing the experience properly meant understanding what the updater was doing underneath: how it identifies the installed firmware version, how it tells the device that an update is starting, how it breaks a firmware image into pieces, what the device sends back after each piece, how retries work, and how the application decides that the update is complete.
+
+Once that communication had been reconstructed, the desktop utility stopped being a technical requirement.
+
+So I rebuilt the updater for the browser.
+
+---
+
+## What I built
+
+The result is a web application that communicates directly with the PT-SP-HD14-48G over USB using the browser's **Web Serial API**.
+
+There is no hidden GTool process, no automation clicking through the original application, and no Windows executable running behind the page. The update protocol itself has been recreated in TypeScript.
+
+The transition looks roughly like this:
+
+```mermaid
+flowchart LR
+    A["Original GTool desktop updater"] --> B["Recovered device protocol"]
+    B --> C["TypeScript update engine"]
+    C --> D["Web Serial"]
+    D --> E["USB"]
+    E --> F["PT-SP-HD14-48G"]
 ```
 
-Then `npm run dev`. Demo mode behaves identically either way.
+The interesting part is that the browser now owns the entire update conversation.
 
-### Browser requirements
+From the person's perspective, the flow is intentionally boring:
 
-Same as Web Serial in general: a Chromium-based desktop browser (Chrome or
-Edge — Web Serial is not available in Firefox or Safari), and the page
-must be served over `https://` or `localhost`.
-
-### Serial parameters used
-
-Confirmed from `docs/gtool-analysis/main_serial_section.txt`
-(`connect-com` handler): 8 data bits, 1 stop bit, set explicitly in the
-source. Baud rate is documented as "user-selected... the manuals use
-115200" — not hardcoded in the recovered source — so 115200 is used here
-as the documented default, not a discovered constant. Parity and flow
-control are never set in the source, so the Web Serial spec default of
-`"none"` is used for both, made explicit in code rather than left
-implicit. The version query itself times out after 2000ms, per
-`main_serial_section.txt`'s `send-com-data` handler (`setTimeout(...,
-i ?? 2e3)`) — not the 25s timeout used for MCU_MAIN firmware data packets.
-
-### Safe bench-test procedure
-
-1. Set `VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION=true` in `.env.local` and
-   run `npm run dev` on a machine with Chrome or Edge.
-2. Connect the PT-SP-HD14-48G over USB, powered on.
-3. Click **Connect device**, and pick the device's serial port from the
-   browser's picker.
-4. Watch the calm status states (Choose your device → Connecting →
-   Checking the device) resolve to either **Device connected** or **We
-   could not identify this device**.
-5. Open **Bench test diagnostics** (collapsed, shown once a real
-   connection attempt starts) to confirm: the USB VID/PID the browser
-   reports, the connection configuration, the exact query bytes sent, the
-   raw reply bytes received, the parsed version, and the parser result.
-6. Click **Disconnect** when done — this only closes the port; it never
-   sends anything.
-
-No firmware file is involved anywhere in this procedure. This has not yet
-been run against physical hardware — see "Unresolved protocol
-ambiguities" below for what that first real run needs to confirm.
-
-### Recovery steps
-
-- **Permission dismissed** ("You did not select a device"): click
-  **Connect device** again — the browser reopens its port picker.
-- **Timeout** ("The device did not respond"): check the USB cable and
-  that the device is powered on, then try again. Nothing was sent that
-  could have changed the device's state.
-- **Disconnected** ("The device was disconnected"): reconnect the cable
-  and click **Connect device** again.
-- If the browser's port picker never lists the device at all, that's a
-  driver/OS-level issue outside what this app can diagnose — check the
-  OS's device manager.
-
-### Unresolved protocol ambiguities carried into this phase
-
-- **13- vs 18-byte mode is unconfirmed for this exact unit.** GTool relies
-  on a user-set checkbox, not auto-detection; this phase defaults to
-  13-byte mode (per protocol_notes.md) and does not attempt automatic
-  mode-switching. The reader recognizes either length if a device happens
-  to reply in 18-byte mode, but the outgoing query is always sent in
-  13-byte mode by default.
-- **No device/model name field exists in this reply.** The recovered
-  version-query reply (`ge()`) encodes only numeric version bytes — no
-  product name, chip name, or hardware identifier. GTool's only
-  model-identifying mechanism is a separate JSON query
-  (`{"guihead":"get_device_name"}`) using entirely different framing,
-  which this phase does not implement. Consequence:
-  `DeviceIdentityResult.compatible` — and the
-  `"identified_compatible_device"` stage — can never be `true` today; the
-  honest result of a valid, checksum-correct reply is "Device connected"
-  with "Device responded, but compatibility could not be confirmed," not a
-  specific model claim.
-- **`reply[10] === 1` is still undocumented.** GTool reads it into a flag
-  it never uses again anywhere in the recovered bundle. Exposed as raw,
-  uninterpreted data (`ParsedVersionReply.unknownFlagAtOffset10`), not a
-  guessed boolean.
-- **USB VID/PID for this device are still unknown** ahead of time (see
-  protocol_notes.md "What is not yet proven"), so `requestPort()` is
-  called with no filter — the picker lists every available serial port,
-  and the bench-test procedure above is how to actually learn the real
-  VID/PID.
-
-## Phase 2B: real firmware transfer (software-complete, hardware-unvalidated)
-
-**Status: software-complete, disabled by default, not yet run against a physical device.** This phase
-implements the complete real MCU_MAIN firmware-transfer path — initialization commands, `FE EF`
-data packets, reply parsing, retry/rejection/timeout/disconnect handling, post-update verification,
-and a bench-only "Hardware validation mode" confirmation UI — behind three independent safety flags
-that all default to `false`. **No physical PT-SP-HD14-48G was connected during this phase.** Every
-byte sequence and timing value below is either sourced directly from `docs/gtool-analysis/` or
-explicitly marked as unproven; nothing here was guessed.
-
-### The three-flag safety model
-
-Real firmware transfer requires **all three** of the following to be `"true"` at once:
-
-```
-VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION=true
-VITE_ENABLE_REAL_FLASHING=true
-VITE_ENABLE_HARDWARE_VALIDATION_MODE=true
+```mermaid
+flowchart TD
+    A["Connect the device"] --> B["Read the installed version"]
+    B --> C["Choose the firmware"]
+    C --> D["Validate the update"]
+    D --> E["Update the device"]
+    E --> F["Verify what is now installed"]
 ```
 
-- Checked as a single gate, `isRealFirmwareTransferEnabled()`
-  (`src/lib/webserial/flags.ts`), not as three separate checks scattered
-  through the code. `WebSerialTransport` calls this gate — not the
-  individual flags — at the top of every method (`attachPort`, `connect`,
-  `sendAndReceive`), so it is structurally impossible for any one or two
-  flags to make firmware writing reachable. This is locked in by
-  `src/lib/webserial/__tests__/flags.test.ts` (the full 2³ combination
-  matrix) and `WebSerialTransport.test.ts` ("stays inert unless all three
-  safety flags are true").
-- All three default to `false` in `.env.example`, `Dockerfile` (build
-  `ARG`s), and `docker-compose.yml` (build-arg passthrough). A clean
-  `npm run build` or `docker compose build` with no `.env.local` produces a
-  build where none of the three is `true`.
-- `VITE_ENABLE_HARDWARE_VALIDATION_MODE` is the newest, **temporary**
-  flag. It exists specifically because Phase 2A proved the recovered
-  version-query reply carries no device/model-name field
-  (`DeviceIdentityResult.compatible` can never be `true`). Since the
-  filename, USB VID/PID, and a successful version reply are all
-  insufficient proof of device identity on their own, this flag gates a
-  bench-only screen (see below) that substitutes explicit, typed human
-  confirmation for the missing electronic proof. It is meant to be removed
-  once a real bench-test pass (see the runbook below) proves the protocol
-  and a better identification mechanism can replace it.
-- The normal consumer interface (Connect → Choose firmware → Ready →
-  Updating → Done) never changes when this flag is `false` — it still
-  behaves exactly as Phase 2A described. The "Hardware validation mode"
-  screen only renders when all three flags are `true`.
+That simplicity is deliberate.
 
-### The real update sequence
+There is quite a lot happening underneath it.
 
-Reachable only with all three flags true, using the exact sequence
-recovered from GTool 2.0.6 (`protocol_section.js`, functions `_e`/`De`/`ge`):
+---
 
-1. User clicks **Connect device**, which now opens a real `WebSerialTransport`
-   (a single `requestPort()` + `open()` — no second picker later; the same
-   connection carries the harmless version query, the initialization
-   commands, and every firmware packet — see "reuse the selected
-   connection" below).
-2. Port opens with the recovered serial configuration (115200 8N1, no
-   parity, no flow control — see Phase 2A above).
-3. The harmless version-query command (`A5 5B 01 13 …`) runs and its reply
-   is shown (checksum-valid or not).
-4. If all three flags are true and the reply was checksum-valid, **Continue
-   to hardware validation** becomes available.
-5. Firmware is selected locally and validated by
-   `validateRealMcuMainFirmware` (see below) — stricter than the demo
-   validator.
-6. The **Hardware validation mode** screen requires: a valid device reply,
-   the exact `PT-SP-HD14-48G` token in the firmware filename, a firmware
-   file that passes real-path validation, physical-label / stable-power /
-   stay-connected / no-tested-recovery-path acknowledgements, an extra
-   acknowledgement if the selected version is the same as or older than the
-   installed version, and typing `PT-SP-HD14-48G` exactly. All conditions
-   are required at once (`isHardwareValidationGateOpen`,
-   `src/lib/webserial/hardwareValidation.ts`) — there is no partial-credit
-   path.
-7. First initialization command (`A5 5B 08 07 00×8 F1`) is sent, with up to
-   three total attempts (source: `Q(2, …)` retry helper).
-8. GTool does not validate the content of the start command's reply beyond
-   receiving one within the timeout — matched exactly: `UpdateEngine`
-   retries the send on transport failure, but never inspects the reply's
-   bytes.
-9. The recovered ~2 second gap is observed (`initCommandGapMs`, default
-   `2000`).
-10. Second/confirm command (`A5 5B 08 08 00×8 F0`) is sent once, not
-    retried — matching the recovered source exactly (`Le && await
-    z(Le, {...})`, no `Q()` wrapper). Its reply content is likewise never
-    validated, matching the recovered source.
-11. Firmware packets (`FE EF` + index + 1024 bytes + checksum) are sent
-    sequentially.
-12. Each reply's byte 4 is parsed: `0` → next packet; `1` → resend the
-    exact same packet after ~100ms, up to the configured retry limit; `2`
-    or anything else → stop immediately, no retry.
-13–17. Timeout, malformed reply, disconnection, and resend-limit exhaustion
-    each stop the run safely with a distinct, honest failure code — none of
-    them silently continue.
-18. The final packet uses the final-packet flag (`0x80` OR'd into the index
-    high byte) and `0xFF` padding.
-19. The recovered post-final-packet delay (3s) and settle delay (7s) are
-    observed before verification.
-20. The installed version is queried again, best-effort — this never gates
-    success or failure by itself (see "Completion" below).
-21. Completion is classified honestly (see below) — never as a bare
-    "success" just because the last packet was written.
+## Making a technical process feel simple without making it dumb
 
-### Reusing the connection instead of the frozen Phase 2A class
+A good interface does not remove complexity by pretending it is not there. It handles the complexity and presents the parts that matter.
 
-`ReadOnlyDeviceConnection`'s public surface is deliberately frozen to
-exactly `connect`/`queryDeviceIdentity`/`disconnect`/`isConnected` (locked
-in by its own test, "exposes no method beyond...") — Phase 2B does not add
-a fifth method to hand its port to the real transport, to keep that
-safety property intact. Instead, when all three flags are true, **Connect
-device** uses the real `WebSerialTransport` directly for the harmless
-version query too (`buildVersionQueryCommand` + `interpretCompleteReply`,
-both reused from `src/lib/gtool` / `src/lib/webserial/deviceIdentity.ts` —
-not duplicated), and the exact same open port then carries the firmware
-transfer. There is only ever one `requestPort()` prompt per session on
-this path, and the connection is genuinely reused end-to-end — see
-`useFirmwareUpdater.connectHardwareValidationDevice` /
-`beginHardwareValidation`.
+That became one of the main ideas behind this project.
 
-### What is proven vs. not proven
+The updater needs to establish a serial connection, inspect the device, validate the firmware image, prepare the hardware for an update, split the image into packets, send those packets one at a time, interpret acknowledgements from the device, resend packets when requested, stop when the protocol says something is wrong, and then verify the installed version afterward.
 
-| Detail | Status |
-|---|---|
-| Init command bytes, gap timing, retry count for the start command | Proven — `packet_reference_output.txt`, `protocol_section.js` |
-| Confirm command sent once, reply content unchecked | Proven — `protocol_section.js` (`_e`) |
-| Packet framing, final-packet flag, `0xFF` padding, checksum algorithm | Proven — `protocol_notes.md`, `gtool_packet_reference.py` |
-| Reply status byte semantics (0/1/2), ~100ms resend delay, 3 total attempts | Proven — `protocol_notes.md` "Reply handling" |
-| Post-final-packet 3s delay, 7s settle delay before re-query | Proven — `protocol_section.js` (`De`) |
-| Reply length is 13 or 18 bytes for every command, including init and data | Proven — `main_serial_section.txt`, `protocol_section.js` |
-| Whether a same-version/downgrade update is blocked by GTool | **Not proven** — no such policy found; this app never invents one, only adds an extra acknowledgement |
-| Whether cancellation/abort mid-transfer is safe | **Not proven** — no recovered evidence either way; treated as unsafe, so no cancel action exists once initialization begins |
-| Whether GTool reconnects or expects a reboot after the final packet | **Not proven** — recovered source only re-queries the version after fixed delays; it never re-opens the serial port or waits for a specific reboot signal |
-| A dedicated "update complete" completion command from the device | **Not proven** — no such command was recovered; completion is inferred only from the final packet's accepted reply plus the best-effort version re-query |
-| USB VID/PID, real device byte-mode (13 vs 18) confirmation | **Not proven** — see Phase 2A "Unresolved protocol ambiguities" |
-| 13- vs 18-byte mode auto-selection | **Not proven** — GTool uses a user checkbox, not auto-detection; this app defaults to 13-byte mode and does not implement auto-switching |
+None of that should require the person updating the box to understand serial framing, packet indices or hexadecimal commands.
 
-Where a step could not be proven, the surrounding architecture was still
-built (typed, tested, gated) but the step itself is either left
-unreachable or explicitly labeled best-effort/unproven in the UI and code
-— never replaced with a plausible-looking guess.
+What they should understand is:
 
-### Completion and recovery model
+- which device they connected;
+- which firmware is currently installed;
+- which file they are about to install;
+- whether the file looks appropriate;
+- whether the update has actually started;
+- how far through it they are;
+- whether something went wrong;
+- whether the resulting firmware could be verified.
 
-`UpdateEngine`'s `"completed"` event now carries a `verified: boolean`
-flag. The final packet being accepted is **not** treated as unconditional
-success — completion is classified as one of:
+That is the distinction I wanted the application to make.
 
-- **completed, verified** — the final packet was accepted and the
-  post-update version query succeeded.
-- **completed, verification unavailable** — the final packet was accepted,
-  but the best-effort version re-query failed (timeout, disconnect,
-  malformed reply). Never shown as a failure.
-- **failed — protocol rejection** — the device actively rejected a packet
-  or command (status 2) or exhausted the resend limit.
-- **failed — interrupted** — a transport error (timeout, disconnect)
-  occurred during the transfer itself.
-- **cancelled** — only reachable before `start()` is called at all, for a
-  real hardware run (see below).
+---
 
-`src/lib/update-engine/recovery.ts` (`classifyRecovery`) turns a finished
-run's structured event log into one of six typed outcomes: `safe_to_retry`,
-`initialization_started_no_packet_accepted`, `transfer_partially_completed`,
-`completed_verification_failed`, `device_disconnected_or_rebooting`, or
-`unknown`. **Only `safe_to_retry` is ever offered an automatic "Try
-again"** — every other outcome shows conservative, plain-language guidance
-plus a technical code in collapsed details instead. No new recovery
-command is invented anywhere; the model only classifies what already
-happened.
+## The part I underestimated: failure
 
-### Cancellation and interruption safety
+Sending bytes to a USB device is not especially interesting by itself.
 
-- Cancelling is only available before `start()` is called (the "Update
-  firmware" action itself) for a real hardware run. Once the engine enters
-  `"initializing"`, `UpdatingStage` renders no Cancel action at all for a
-  real hardware run — the demo/simulator path is unaffected and keeps its
-  existing mid-run Cancel button, since an offline simulator can always
-  unwind safely.
-- A `beforeunload` guard (unchanged from before Phase 2B, already scoped to
-  `isRunning()`) warns before page close/reload/browser shutdown while a
-  run — demo or real — is in progress.
-- The real-hardware screen displays an explicit "do not disconnect USB or
-  power" warning and states that this update can no longer be safely
-  cancelled, for as long as it runs.
-- A best-effort Screen Wake Lock (`src/lib/webserial/wakeLock.ts`) is
-  acquired only for a real hardware run and released after
-  completion/failure/cancellation. Unavailability (unsupported browser,
-  hidden tab, denied permission) never fails or blocks the update — it
-  degrades silently.
-- `WebSerialTransport` structurally prevents a second connection attempt,
-  a second concurrent packet exchange, or swapping the port while one is
-  attached (`PortChangeRejectedError`), and `UpdateEngine.isRunning()`
-  already prevented parallel updates and mid-run firmware replacement
-  before Phase 2B.
-- An interrupted destructive update is never described as harmless: the
-  UI states that the device's state may be incomplete and that it should
-  stay powered until recovery guidance is followed.
+The more interesting question is what happens when something goes wrong **after the firmware update has already started**.
 
-### Real-path firmware validation
+A normal web application gets to be optimistic about failure. If an API request dies, you can usually retry it. If a page fails to load, reload the page.
 
-`validateRealMcuMainFirmware` (`src/lib/gtool/validation.ts`) layers
-strictly additional checks around the unchanged `validateMcuMainFirmware`
-used by the demo simulator — the demo's looser acceptance is untouched:
+Firmware is different.
 
-- must be a `.bin` file,
-- filename must identify an `MCU_MAIN` image,
-- filename must contain the exact product token `PT-SP-HD14-48G`,
-- the file must not be empty,
-- the file must not packetize into more packets than the recovered
-  packet-index format can represent (`MAX_REPRESENTABLE_PACKET_INDEX =
-  0x7FFF`, since the final-packet flag bit must stay free in the index
-  high byte).
+If the device has entered an update state and already accepted part of a firmware image, blindly retrying everything may be exactly the wrong thing to do.
 
-No downgrade-blocking policy is invented (none was recovered from GTool);
-a same-version-or-older selection instead requires one additional explicit
-acknowledgement in the Hardware validation mode checklist.
+A serial write can also fail in ambiguous ways. If the browser waits too long for a write to complete, it cannot necessarily prove whether zero bytes, half a packet, or the entire packet reached the device.
 
-### What this phase does NOT claim
+That means a nice friendly **Try Again** button is not automatically a good idea.
 
-- It does not claim the protocol has been validated against a physical
-  PT-SP-HD14-48G. It has not.
-- It does not claim post-update verification is guaranteed — only
-  best-effort, exactly matching GTool's own recovered behavior.
-- It does not claim cancellation mid-transfer is safe.
-- It does not claim electronic proof of device identity — "Hardware
-  validation mode" exists precisely because that proof doesn't exist yet.
-- Public production deployments must keep all three flags `false`. This
-  phase does not change that default anywhere, and nothing in this
-  repository flips it.
+The updater is therefore deliberately conservative whenever it no longer knows enough to continue safely.
 
-### Safe future bench-test procedure
+If a write becomes uncertain, the current connection is abandoned and a fresh connection is required.
 
-See `docs/hardware-validation/PT-SP-HD14-48G-bench-test.md` for the full,
-gated, step-by-step runbook to use once a physical splitter is available.
-It is written to be followed later — it was not executed during this
-phase, and no physical device was used to write it.
+If a response is malformed, the application does not guess what the device probably meant.
 
-## Architecture
+If the device rejects a packet, the transfer stops according to the protocol.
 
-Strict separation between layers, so consumer-friendly presentation never
-has to compromise protocol correctness:
+And if the complete firmware image is transferred but the device cannot be queried afterward, the application does not quietly convert that into a green verified-success state.
 
-```
-src/lib/gtool/           Framework-independent protocol library (pure functions,
-                          Uint8Array in/out): validation, packetization, framing,
-                          checksums, command builders, reply parsing.
-src/lib/update-engine/   Framework-independent state machine (UpdateEngine).
-                          Drives any UpdateTransport through
-                          idle → firmware_loaded → validating → ready →
-                          initializing → transferring ⇄ retrying → finalizing →
-                          verifying → completed | failed | cancelled.
-src/lib/simulator/       Deterministic offline UpdateTransport used by demo
-                          mode and the test suite. Never touches Web Serial.
-src/lib/webserial/       Typed Web Serial capability detection; WebSerialTransport
-                          (the real firmware-writing boundary — implemented and
-                          tested, but reachable only when all three Phase 2B
-                          safety flags are true, see "Phase 2B" above); and,
-                          independently, ReadOnlyDeviceConnection (Phase 2A's
-                          real, read-only identification path); plus
-                          hardwareValidation.ts (the bench-confirmation gate)
-                          and wakeLock.ts (best-effort screen wake lock).
-src/ui/                  Consumer-facing React layer: a guided-flow hook
-                          (useFirmwareUpdater) that talks to lib/*, plain-
-                          language copy (copy.ts), a technical→readable
-                          diagnostics mapper (diagnostics.ts), and one
-                          presentational component per stage.
+It tells the truth:
+
+> **The firmware was transferred, but the installed version could not be verified.**
+
+That distinction matters.
+
+---
+
+## One rule ended up shaping most of the project
+
+While building this, I kept coming back to the same principle:
+
+> **Do not invent certainty just because certainty makes for a cleaner interface.**
+
+There are several places where that matters.
+
+The version response recovered from the device tells us which firmware version is installed, but it does not give us a reliable electronic model identifier.
+
+That means the software cannot honestly say:
+
+> “I have cryptographically proven that this is a PT-SP-HD14-48G.”
+
+So it does not.
+
+The hardware-validation flow asks for explicit model confirmation instead.
+
+Likewise, transferring the last firmware packet does not prove that the new firmware is now running correctly.
+
+So transfer completion and version verification are separate states.
+
+The UI is cleaner because those distinctions are explained clearly, not because they are hidden.
+
+---
+
+## A firmware updater should be difficult to activate by accident
+
+The normal production version of this project does **not** have real firmware flashing enabled.
+
+That is intentional.
+
+Real device writes require three separate build-time gates:
+
+```text
+VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION
+VITE_ENABLE_REAL_FLASHING
+VITE_ENABLE_HARDWARE_VALIDATION_MODE
 ```
 
-`UpdateEngine` never imports React, and no UI component imports
-`src/lib/gtool` directly — everything technical is mediated by
-`useFirmwareUpdater`.
+All three default to:
 
-### Guided flow
+```text
+false
+```
 
-One stage is visible at a time, each with a single dominant action:
+I did this because a destructive hardware operation should not become available because somebody accidentally exposed a button or changed a single UI condition.
 
-1. **Connect** — browser compatibility is checked automatically. "Connect
-   device" tries the demo instead unless `VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION=true`
-   (Phase 2A) or all three Phase 2B flags are true, in which case it opens
-   a real connection (read-only, or read-write when all three flags allow it).
-2. **Device status** *(real path only)* — calm connecting states, then an
-   honest result ("Device connected" / "We could not identify this
-   device"), the installed version when available, and Disconnect. With
-   only the Phase 2A flag on, this path never reaches step 3 onward. With
-   all three Phase 2B flags on and a checksum-valid reply, a **Continue to
-   hardware validation** action becomes available instead.
-3. **Choose update** — confirms the connection, shows the device name and
-   installed version, and lets the user pick a firmware file (validated by
-   the stricter real-path validator on the Phase 2B bench path).
-4. **Hardware validation mode** *(Phase 2B bench path only)* — a clearly
-   labelled, non-consumer screen requiring every acknowledgement plus a
-   typed `PT-SP-HD14-48G` confirmation before the update action unlocks
-   — see "Phase 2B" above.
-5. **Ready** — validation runs automatically; once it passes, the screen
-   summarizes the version change and offers one "Update firmware" action.
-6. **Updating** — a calm, full-focus progress screen. No packet counters,
-   no configuration panels. On the Phase 2B real path, Cancel disappears
-   once initialization begins and an explicit "do not disconnect" warning
-   appears.
-7. **Done** — a confident success screen (verified or unverified), or a
-   plain-language recovery screen on failure/cancellation, with automatic
-   "Try again" offered only when nothing was sent to the device yet.
+The checks exist below the React interface as well.
 
-Protocol state, transport label, packet counts, the structured event log,
-and technical error codes live behind a collapsed **Technical details**
-disclosure on the updating/done stages. The real-device path has its own
-equivalent, **Bench test diagnostics** (see "Phase 2A" above) — both are
-collapsed by default.
+The real hardware path also validates the firmware before it is transferred, enforces protocol limits, bounds serial reads and writes so they cannot hang forever, and requires explicit confirmation before the destructive part of the process can begin.
 
-## Local development
+There is deliberately no general-purpose serial terminal in the application either.
 
-Requires Node.js 20+.
+The updater knows how to perform this update protocol. It is not designed to become a convenient browser interface for sending arbitrary bytes to hardware.
+
+---
+
+## The architecture
+
+The project is intentionally split so that the UI, update logic and serial transport are not one large piece of application code.
+
+```mermaid
+flowchart TB
+    USER["Person updating the device"] --> UI["React UI"]
+
+    UI --> SAFETY["Validation & safety layer"]
+    SAFETY --> ENGINE["UpdateEngine"]
+
+    ENGINE --> PROTOCOL["Protocol & packet logic"]
+    ENGINE --> RECOVERY["Failure & recovery logic"]
+
+    ENGINE --> SERIAL["WebSerialTransport"]
+    SERIAL --> DEVICE["PT-SP-HD14-48G"]
+
+    ENGINE -.-> SIM["SimulatorTransport"]
+    SIM -.-> TESTS["Automated tests"]
+```
+
+The separation is fairly simple.
+
+The **React UI** deals with the human being.
+
+The **UpdateEngine** understands the firmware-update process.
+
+The **WebSerialTransport** moves bytes between the browser and the device.
+
+And the **SimulatorTransport** behaves like a device closely enough that the update engine can be exercised without repeatedly risking real hardware during development.
+
+The distinction I care about most is:
+
+> **The serial transport moves bytes. The update engine understands what those bytes mean.**
+
+That keeps the interesting part of the project independent of React and independent of the browser implementation.
+
+---
+
+## So how much of this actually works?
+
+At the software level, the project is in a pretty advanced state.
+
+The current suite contains:
+
+### **196 automated tests across 18 test files**
+
+Those tests cover both the normal update path and a fairly unhealthy collection of ways things can go wrong, including:
+
+- normal firmware transfer;
+- packet retries;
+- repeated retry requests;
+- explicit transfer rejection;
+- malformed device responses;
+- invalid checksums;
+- read timeouts;
+- write timeouts;
+- serial writes that never complete;
+- disconnects during an update;
+- disconnects after the final firmware packet;
+- firmware-size and packet-index boundaries;
+- incorrect recovery state;
+- stale device identity after a dangerous failure;
+- accidentally starting the update twice;
+- wake-lock cleanup.
+
+The full firmware example used while reconstructing the protocol is **112,340 bytes**.
+
+That becomes 110 firmware packets.
+
+The end-to-end simulated hardware path therefore performs:
+
+```text
+2 initialization commands
+110 firmware packet writes
+1 final version query
+────────────────────────
+113 serial writes
+```
+
+Those writes pass through the same `WebSerialTransport` implementation used by the real-device path.
+
+That gives me a fairly high degree of confidence that the software constructs the protocol conversation I expect.
+
+There is still one very important thing I am deliberately **not** claiming.
+
+---
+
+## Software complete. Physical validation pending.
+
+A physical PT-SP-HD14-48G has not yet been used for the final bench-validation pass.
+
+That means I am **not** currently claiming:
+
+> “I successfully flashed a real production unit from the browser.”
+
+Automated testing can prove quite a lot. It can prove the bytes being generated, packet boundaries, retry behavior, checksums, state transitions, timeout handling and recovery logic.
+
+It cannot prove what a particular physical device will do when connected.
+
+There are still things the real hardware needs to answer, including exactly how its USB interface enumerates, which supported response format the production unit uses, what happens to the serial connection during reboot, whether the device disappears and reappears as a port, and whether the timing recovered from GTool behaves exactly as expected on the real unit.
+
+That is why this repository describes the current state as:
+
+> **Software complete / hardware validation pending**
+
+rather than treating “196 tests passed” as shorthand for “the hardware has been tested.”
+
+The actual physical validation procedure is documented here:
+
+[**PT-SP-HD14-48G hardware validation plan →**](docs/hardware-validation/PT-SP-HD14-48G-bench-test.md)
+
+---
+
+## Why put this in a browser at all?
+
+Because after reconstructing the protocol, keeping the desktop application started to feel unnecessary.
+
+Modern browsers can request access to serial devices directly, with the user explicitly selecting which connected device the page is allowed to communicate with.
+
+That means the updater can go from:
+
+```text
+Find vendor utility
+        ↓
+Download executable
+        ↓
+Install / launch it
+        ↓
+Work out the interface
+        ↓
+Connect device
+        ↓
+Find firmware file
+        ↓
+Start update
+```
+
+to:
+
+```text
+Open page
+   ↓
+Connect device
+   ↓
+Update
+```
+
+Obviously the complexity has not vanished.
+
+It has moved into the software, which is exactly where I think it belongs.
+
+The person updating an HDMI splitter should not have to become an embedded-systems engineer for five minutes.
+
+---
+
+## Try the interface
+
+The current build is running here:
+
+### [negruhd1448.aiexperiments.eu →](https://negruhd1448.aiexperiments.eu)
+
+The public production deployment keeps the real flashing path disabled by default.
+
+The hardware connection itself uses the Web Serial API and therefore needs a compatible desktop browser and HTTPS.
+
+---
+
+## For the people who actually want the hex
+
+Most people should be able to understand this project without knowing anything about serial protocols.
+
+But the recovered protocol is part of the interesting work, so it is here for anyone who wants to go a level deeper.
+
+<details>
+<summary><strong>Show the recovered protocol details</strong></summary>
+
+<br>
+
+The updater communicates over serial at:
+
+```text
+115200 baud
+8 data bits
+1 stop bit
+No parity
+No flow control
+```
+
+The recovered firmware-version request is:
+
+```text
+A5 5B 01 13 00 00 00 00 00 00 00 00 EC
+```
+
+Before sending firmware, GTool sends:
+
+```text
+A5 5B 08 07 00 00 00 00 00 00 00 00 F1
+```
+
+and, roughly two seconds later:
+
+```text
+A5 5B 08 08 00 00 00 00 00 00 00 00 F0
+```
+
+The firmware image is divided into **1,024-byte blocks**.
+
+Each data frame looks like this:
+
+```text
+┌────────┬──────────────┬───────────────────┬──────────┐
+│ FE EF  │ Packet index │ 1024-byte payload │ Checksum │
+└────────┴──────────────┴───────────────────┴──────────┘
+```
+
+That produces a **1,029-byte frame**.
+
+The final firmware block is padded with `FF` when the file does not divide evenly into 1,024-byte chunks.
+
+The device then responds with a status representing:
+
+```text
+0 = packet accepted
+1 = send the same packet again
+2 = transfer failed
+```
+
+The final packet is marked using the high bit of the packet index.
+
+For the 112,340-byte firmware example:
+
+```text
+Firmware size:       112,340 bytes
+Payload size:          1,024 bytes
+Firmware packets:        110
+Final packet index:       109
+Final header:        FE EF 80 6D
+```
+
+The implementation also validates packet limits, framing and checksums instead of assuming that a reply is trustworthy just because some bytes arrived.
+
+</details>
+
+---
+
+## Running it locally
+
+The project is built with **TypeScript, React, Vite and Vitest**.
+
+Clone it:
+
+```bash
+git clone https://github.com/MLupu88/PT-SP-HD14-48G-Firmware-Updater.git
+cd PT-SP-HD14-48G-Firmware-Updater
+```
+
+Install the dependencies:
 
 ```bash
 npm install
+```
+
+Start the development server:
+
+```bash
 npm run dev
 ```
 
-Opens on `http://localhost:5173`. Web Serial requires a Chromium-based
-desktop browser (Chrome or Edge) and either `https://` or `localhost` — the
-dev server satisfies the latter automatically. Demo mode works in any
-browser.
-
-## Testing
-
-```bash
-npm run test        # run once
-npm run test:watch  # watch mode
-```
-
-Covers the protocol library (init commands, checksum algorithm, packet
-count/framing/padding for the documented 112,340-byte firmware, reply
-parsing), the update engine (retry, failure, cancellation, parallel-update
-prevention, full simulated completion), and the simulator transport itself.
-
-Phase 2A's real, read-only connection path is covered against a
-deterministic in-memory mock of the Web Serial API
-(`src/lib/webserial/__tests__/mockWebSerial.ts` — no physical hardware
-involved): port selection/cancellation, chunked and exact replies in both
-13- and 18-byte mode, checksum failure, malformed framing, timeout,
-mid-read disconnection, reader/writer lock cleanup, and parallel-attempt
-prevention.
-
-Phase 2B's real, firmware-writing transport is covered against the same
-mock, gated behind the full 2³ feature-flag combination matrix
-(`src/lib/webserial/__tests__/flags.test.ts`,
-`WebSerialTransport.test.ts` "stays inert unless all three safety flags
-are true"): connection reuse/attach, concurrent-access guards, reader/writer
-lock cleanup, backpressure, and every reply-handling case (chunked, 13- and
-18-byte, invalid checksum, malformed framing, timeout, disconnect).
-`WebSerialTransport.realTransfer.test.ts` drives `UpdateEngine` against the
-real transport end-to-end for the documented 112,340-byte / 110-packet
-example — exact init command bytes, the recovered ~2s inter-command gap,
-every packet in order with no skips or duplicates, the exact final-packet
-header (`FE EF 80 6D`) and `0xFF` padding, the post-update version query,
-and a `completed, verified: true` outcome — plus dedicated tests for
-single-packet resend, retry-limit exhaustion, protocol rejection (status
-2), mid-transfer timeout, mid-transfer disconnection, and disconnection
-during the post-update query (`completed, verified: false`, never reported
-as a failure). `src/lib/update-engine/__tests__/recovery.test.ts` covers
-all six typed recovery outcomes; `hardwareValidation.test.ts` covers the
-all-or-nothing bench-confirmation gate; `wakeLock.test.ts` covers
-best-effort acquire/release including unavailability.
-
-The real firmware binary referenced in `docs/gtool-analysis` is
-copyrighted and intentionally **not** included in this repository — tests
-use a synthetic buffer of the same documented length for structural
-assertions, and assert exact bytes only where `packet_reference_output.txt`
-provides values that don't depend on firmware content (the init commands).
-See the comments in `src/lib/gtool/__tests__/packet.test.ts` for details.
-
-Other checks:
+The normal verification commands are:
 
 ```bash
 npm run lint
 npm run typecheck
+npm run test
 npm run build
 ```
 
-## Production build
+There is also a Docker deployment:
 
 ```bash
-npm run build    # outputs static assets to dist/
-npm run preview  # serve the production build locally
+docker compose up -d --build
 ```
 
-## Docker
+The production Docker build runs the project's checks before producing the final application image.
 
-```bash
-docker compose up --build
+Real hardware flashing remains disabled unless the corresponding hardware-validation gates are explicitly enabled at build time.
+
+---
+
+## What's where
+
+The repository is relatively small and the important parts are separated by responsibility:
+
+```text
+src/
+├── lib/
+│   ├── gtool/
+│   │   └── Recovered protocol, packet creation and validation
+│   │
+│   ├── update-engine/
+│   │   └── Firmware transfer, retries, verification and recovery
+│   │
+│   └── webserial/
+│       └── Browser serial connection and bounded I/O
+│
+└── ui/
+    └── The actual updater experience
+
+docs/
+└── hardware-validation/
+    └── Physical bench-test procedure
 ```
 
-Serves the static build via an unprivileged Nginx (`nginxinc/nginx-unprivileged`,
-non-root, listens on 8080) at `http://localhost:8080`. A `/health` endpoint
-is provided for container health checks (backed by `public/health.txt`).
+The firmware `.bin` itself is treated as binary data.
 
-To build with different safety-flag values at image-build time (all three
-default to `false`; see "Phase 2B" above for why the third exists):
+This project did not require disassembling or reconstructing the firmware running inside the splitter. The problem was understanding the **update protocol around it**, which is a much narrower and more useful problem for what I wanted to build.
 
-```bash
-VITE_ENABLE_REAL_FLASHING=false \
-VITE_ENABLE_READ_ONLY_DEVICE_CONNECTION=false \
-VITE_ENABLE_HARDWARE_VALIDATION_MODE=false \
-  docker compose up --build
-```
+---
 
-Because Vite inlines `VITE_*` variables at build time, the flags must be
-set before `docker build`/`docker compose build`, not at container
-runtime. **Public production deployments must always build with all three
-flags `false`** — enabling any of them is a local bench-only action, never
-appropriate for a deployed image.
+## What I like about this project
 
-## Protocol source
+I originally wanted a better firmware updater.
 
-All protocol details come from `docs/gtool-analysis/` (static analysis of
-the GTool 2.0.6 installer and the supplied firmware — no physical device
-was connected during that analysis). Where those sources were ambiguous,
-the code says so explicitly via a typed "unsupported" field and a `TODO`
-comment pointing at the source line, instead of guessing — see
-`ParsedVersionReply.unknownFlagAtOffset10` in `src/lib/gtool/types.ts` for
-the one such case.
+That is still what the project is.
+
+But somewhere along the way it also became an interesting example of how much software exists simply because nobody has questioned the boundary around it.
+
+At the beginning, GTool looked like part of the product. If you wanted to update this box, you used GTool. That was just how the hardware worked.
+
+Except it wasn't.
+
+The hardware did not care about GTool.
+
+It cared about a particular conversation happening over a serial connection.
+
+Once that conversation was understood, the desktop application became just one possible implementation of it.
+
+That meant it could be replaced with a protocol engine, the protocol engine could be tested independently, and the whole thing could be put behind a much simpler browser experience.
+
+So the part I find most interesting is not that a firmware updater now runs in a browser.
+
+It is that something which initially looked like a fixed limitation of the product turned out to be an implementation choice.
+
+And implementation choices can be changed.
+
+---
+
+## Disclaimer
+
+This is an **independent, unofficial project** and is not affiliated with, endorsed by, sponsored by, or maintained by PureLink GmbH or PureTools.
+
+`PureLink`, `PureTools`, `PT-SP-HD14-48G`, GTool and other referenced product names belong to their respective owners.
+
+Firmware installation can render hardware unusable when performed with an incorrect firmware image, protocol or target device.
+
+Physical validation of this implementation against a PT-SP-HD14-48G is still pending, so the real flashing path should currently be considered **hardware-unvalidated**.
