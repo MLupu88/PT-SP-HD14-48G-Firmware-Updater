@@ -12,15 +12,15 @@
 <p align="center">
   <a href="https://negruhd1448.aiexperiments.eu"><strong>Open the live app →</strong></a>
 </p>
-
 <p align="center">
+  <img src="https://img.shields.io/badge/Target-PT--SP--HD14--48G-black" alt="PT-SP-HD14-48G">
+  <img src="https://img.shields.io/badge/PureTools-HDMI%202.1%20Splitter-555" alt="PureTools">
+  <img src="https://img.shields.io/badge/GTool-Protocol%20Reimplemented-8A2BE2" alt="GTool protocol reimplemented">
+  <img src="https://img.shields.io/badge/Web%20Serial-Browser%20USB-4285F4?logo=googlechrome&logoColor=white" alt="Web Serial">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
-  <img src="https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=black" alt="React">
-  <img src="https://img.shields.io/badge/Web%20Serial-Chromium-4285F4?logo=googlechrome&logoColor=white" alt="Web Serial">
   <img src="https://img.shields.io/badge/tests-196%20passing-brightgreen" alt="196 tests passing">
-  <img src="https://img.shields.io/badge/hardware%20validation-pending-orange" alt="Hardware validation pending">
+  <img src="https://img.shields.io/badge/status-unofficial-lightgrey" alt="Unofficial project">
 </p>
-
 ---
 
 ## Why this exists
